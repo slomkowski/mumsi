@@ -104,8 +104,8 @@ static pj_status_t create_sine_port(pj_pool_t *pool,
     pjmedia_port_info_init(&port->info, &name,
                            PJMEDIA_SIG_CLASS_PORT_AUD('s', 'i'),
                            sampling_rate,
-                           channel_count,
-                           16, sampling_rate * 20 / 1000 * channel_count);
+                           1,
+                           16, sampling_rate * 20 / 1000 * 1);
 
     /* Set the function to feed frame */
     port->get_frame = &sine_get_frame;
@@ -265,12 +265,6 @@ int main(int argc, char *argv[]) {
         if (status != PJ_SUCCESS) error_exit("Error adding account", status);
     }
 
-    /* If URL is specified, make call to the URL. */
-    if (argc > 1) {
-        pj_str_t uri = pj_str(argv[1]);
-        status = pjsua_call_make_call(acc_id, &uri, 0, NULL, NULL, NULL);
-        if (status != PJ_SUCCESS) error_exit("Error making call", status);
-    }
 
     /* Wait until user press "q" to quit. */
     for (; ;) {
