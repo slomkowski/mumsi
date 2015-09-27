@@ -40,7 +40,7 @@ void mumble_audio_callback(uint8_t *audio_data, uint32_t audio_data_size) {
         int64_t sessionId;
         int64_t sequenceNumber;
         int64_t opusDataLength;
-        bool lastPacket = false;
+        bool lastPacket;
 
         dataPointer += mumble_parse_variant(&sessionId, &audio_data[dataPointer]);
         dataPointer += mumble_parse_variant(&sequenceNumber, &audio_data[dataPointer]);
