@@ -8,7 +8,7 @@
 
 namespace pjsua {
 
-    constexpr int SAMPLING_RATE = 8000;
+    constexpr int SAMPLING_RATE = 48000;
 
     inline pj_str_t toPjString(std::string str) {
         return pj_str(const_cast<char *>(str.c_str()));

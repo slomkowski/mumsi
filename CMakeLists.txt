@@ -16,7 +16,7 @@ include_directories(${PJSIP_INCLUDE_DIRS})
 link_directories(libmumble)
 
 set(SOURCE_FILES main.cpp PjsuaCommunicator.cpp PjsuaMediaPort.cpp)
-add_executable(mumsi ${SOURCE_FILES})
+add_executable(mumsi ${SOURCE_FILES} MumbleCommunicator.cpp MumbleCommunicator.hpp)
 target_link_libraries(mumsi ${OPUS_LIBRARIES})
 target_link_libraries(mumsi ${SNDFILE_LIBRARIES})
 target_link_libraries(mumsi ${PJSIP_LIBRARIES})
