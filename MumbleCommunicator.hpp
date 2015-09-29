@@ -1,6 +1,8 @@
 #ifndef MUMSI_MUMBLECOMMUNICATOR_HPP
 #define MUMSI_MUMBLECOMMUNICATOR_HPP
 
+#include "AbstractCommunicator.hpp"
+
 extern "C" {
 #include "libmumble.h"
 }
@@ -8,6 +10,7 @@ extern "C" {
 #include <string>
 #include <stdexcept>
 #include <opus.h>
+#include <log4cpp/Category.hh>
 
 namespace mumble {
 
@@ -18,9 +21,15 @@ namespace mumble {
         Exception(const char *message) : std::runtime_error(message) { }
     };
 
-    class MumbleCommunicator {
+    class MumbleCommunicator : public AbstractCommunicator {
     public:
-        MumbleCommunicator(std::string user, std::string password, std::string host, int port = 0);
+        MumbleCommunicator(
+                SoundSampleQueue<SOUND_SAMPLE_TYPE> &inputQueue,
+                SoundSampleQueue<SOUND_SAMPLE_TYPE> &outputQueue,
+                std::string user,
+                std::string password,
+                std::string host,
+                int port = 0);
 
         ~MumbleCommunicator();
 
@@ -29,8 +38,13 @@ namespace mumble {
         void receiveAudioFrameCallback(uint8_t *audio_data, uint32_t audio_data_size);
 
     private:
+        log4cpp::Category &logger;
+
         mumble_struct *mumble;
-        OpusDecoder *opusState;
+        OpusDecoder *opusDecoder;
+        OpusEncoder *opusEncoder;
+
+        int outgoingAudioSequenceNumber;
     };
 }
 

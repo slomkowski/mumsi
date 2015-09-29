@@ -1,7 +1,12 @@
 #ifndef MUMSI_PJSUAMEDIAPORT_HPP
 #define MUMSI_PJSUAMEDIAPORT_HPP
 
+//todo wywalić i wrzucić do nagłówka z definicjami
+#include "AbstractCommunicator.hpp"
+
 #include <pjmedia.h>
+
+#include <log4cpp/Category.hh>
 
 #include <string>
 #include <stdexcept>
@@ -21,18 +26,43 @@ namespace pjsua {
         }
     };
 
+    pj_status_t MediaPort_getFrame(pjmedia_port *port, pjmedia_frame *frame);
+
+    pj_status_t MediaPort_putFrame(pjmedia_port *port, pjmedia_frame *frame);
+
     class PjsuaMediaPort {
     public:
 
-        PjsuaMediaPort() : _pjmedia_port(nullptr) { }
+        PjsuaMediaPort(
+                SoundSampleQueue<SOUND_SAMPLE_TYPE> &inputQueue,
+                SoundSampleQueue<SOUND_SAMPLE_TYPE> &outputQueue)
+                : inputQueue(inputQueue),
+                  outputQueue(outputQueue),
+                  _pjmedia_port(nullptr),
+                  logger(log4cpp::Category::getInstance("PjsuaMediaPort")) { }
 
         ~PjsuaMediaPort();
 
-
         pjmedia_port *create_pjmedia_port();
 
+
     private:
+        log4cpp::Category &logger;
+
+        SoundSampleQueue<SOUND_SAMPLE_TYPE> &inputQueue;
+        SoundSampleQueue<SOUND_SAMPLE_TYPE> &outputQueue;
+
         pjmedia_port *_pjmedia_port;
+
+        /**
+        * For PJSUA implementation reasons, these callbacks have to be functions, not methods.
+        * Since 'friend' usage.
+        */
+        friend pj_status_t MediaPort_getFrame(pjmedia_port *port,
+                                              pjmedia_frame *frame);
+
+        friend pj_status_t MediaPort_putFrame(pjmedia_port *port,
+                                              pjmedia_frame *frame);
     };
 }
 

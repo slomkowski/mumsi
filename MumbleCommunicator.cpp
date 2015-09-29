@@ -3,19 +3,6 @@
 
 #include "MumbleCommunicator.hpp"
 
-void mumble_serversync_callback(char *welcome_text,
-                                int32_t session,
-                                int32_t max_bandwidth,
-                                int64_t permissions,
-                                void *userData) {
-    printf("%s\n", welcome_text);
-}
-
-static int verify_cert(uint8_t *, uint32_t) {
-    // Accept every cert
-    return 1;
-}
-
 void mumble::MumbleCommunicator::receiveAudioFrameCallback(uint8_t *audio_data, uint32_t audio_data_size) {
     int dataPointer = 1;
     opus_int16 pcmData[1024];
@@ -38,17 +25,19 @@ void mumble::MumbleCommunicator::receiveAudioFrameCallback(uint8_t *audio_data, 
         unsigned int iFrameSize = mumble::SAMPLE_RATE / 100;
         iAudioBufferSize = iFrameSize;
         iAudioBufferSize *= 12;
-        int decodedSamples = opus_decode(opusState,
+        int decodedSamples = opus_decode(opusDecoder,
                                          reinterpret_cast<const unsigned char *>(&audio_data[dataPointer]),
                                          opusDataLength,
                                          pcmData,
                                          iAudioBufferSize,
                                          0);
 
-        printf("\nsessionId: %ld, seqNum: %ld, opus data len: %ld, last: %d, pos: %ld, decoded: %d\n",
-               sessionId, sequenceNumber, opusDataLength, lastPacket, dataPointer, decodedSamples);
+        logger.debug("Received %d bytes of Opus data (seq %ld), decoded to %d bytes. Push it to outputQueue.",
+                     opusDataLength, sequenceNumber, decodedSamples);
+
+        outputQueue.push(pcmData, decodedSamples);
     } else {
-        printf("I received %d bytes of audio data\n", audio_data_size);
+        logger.warn("Received %d bytes of non-recognisable audio data.", audio_data_size);
     }
 }
 
@@ -57,10 +46,31 @@ static void mumble_audio_callback(uint8_t *audio_data, uint32_t audio_data_size,
     mumbleCommunicator->receiveAudioFrameCallback(audio_data, audio_data_size);
 }
 
+static void mumble_serversync_callback(char *welcome_text,
+                                       int32_t session,
+                                       int32_t max_bandwidth,
+                                       int64_t permissions,
+                                       void *userData) {
+    printf("%s\n", welcome_text);
+}
 
-mumble::MumbleCommunicator::MumbleCommunicator(std::string user, std::string password, std::string host, int port) {
+static int verify_cert(uint8_t *, uint32_t) {
+    // Accept every cert
+    return 1;
+}
 
-    opusState = opus_decoder_create(SAMPLE_RATE, 1, nullptr); //todo grab error
+mumble::MumbleCommunicator::MumbleCommunicator(
+        SoundSampleQueue<SOUND_SAMPLE_TYPE> &inputQueue,
+        SoundSampleQueue<SOUND_SAMPLE_TYPE> &outputQueue,
+        std::string user,
+        std::string password,
+        std::string host,
+        int port) : AbstractCommunicator(inputQueue, outputQueue),
+                    outgoingAudioSequenceNumber(1),
+                    logger(log4cpp::Category::getInstance("MumbleCommunicator")) {
+
+    opusDecoder = opus_decoder_create(SAMPLE_RATE, 1, nullptr); //todo grab error
+    opusEncoder = opus_encoder_create(SAMPLE_RATE, 1, OPUS_APPLICATION_VOIP, nullptr);
 
     struct mumble_config config;
     std::memset(&config, 0, sizeof(config));
@@ -95,6 +105,23 @@ mumble::MumbleCommunicator::~MumbleCommunicator() {
 void mumble::MumbleCommunicator::loop() {
     int quit = 0;
     while (quit == 0) {
+
+        opus_int16 pcmData[1024];
+        unsigned char outputBuffer[1024];
+        int pcmLength = inputQueue.pop(pcmData, 720);
+
+        logger.debug("Pop %d samples from inputQueue.", pcmLength);
+
+        if (pcmLength > 0) {
+            int encodedSamples = opus_encode(opusEncoder, pcmData, pcmLength, outputBuffer, 1024);
+
+            logger.debug("Sending %d bytes of Opus audio data (seq %d).", encodedSamples, outgoingAudioSequenceNumber);
+
+            mumble_send_audio_data(mumble, outgoingAudioSequenceNumber, outputBuffer, encodedSamples);
+
+            outgoingAudioSequenceNumber += 2;
+        }
+
         int status = mumble_tick(mumble);
         if (status < 0) {
             throw mumble::Exception("mumble_tick status " + status);

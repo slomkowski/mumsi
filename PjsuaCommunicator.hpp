@@ -2,6 +2,7 @@
 #define MUMSI_PJSUACOMMUNICATOR_HPP
 
 #include "PjsuaMediaPort.hpp"
+#include "AbstractCommunicator.hpp"
 
 #include <pjmedia.h>
 
@@ -12,19 +13,21 @@ namespace pjsua {
 
     constexpr int SIP_PORT = 5060;
 
-    class PjsuaCommunicator {
+    class PjsuaCommunicator : public AbstractCommunicator {
     public:
-        PjsuaCommunicator(std::string host,
-                          std::string user,
-                          std::string password,
-                          PjsuaMediaPort &mediaPort);
+        PjsuaCommunicator(
+                SoundSampleQueue<SOUND_SAMPLE_TYPE> &inputQueue,
+                SoundSampleQueue<SOUND_SAMPLE_TYPE> &outputQueue,
+                std::string host,
+                std::string user,
+                std::string password);
 
         ~PjsuaCommunicator();
 
         void loop();
 
     private:
-        PjsuaMediaPort &mediaPort;
+        PjsuaMediaPort mediaPort;
     };
 
 }

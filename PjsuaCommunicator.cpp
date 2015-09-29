@@ -60,10 +60,14 @@ static void onCallState(pjsua_call_id call_id,
 }
 
 
-pjsua::PjsuaCommunicator::PjsuaCommunicator(std::string host,
-                                            std::string user,
-                                            std::string password,
-                                            PjsuaMediaPort &mediaPort) : mediaPort(mediaPort) {
+pjsua::PjsuaCommunicator::PjsuaCommunicator(
+        SoundSampleQueue<SOUND_SAMPLE_TYPE> &inputQueue,
+        SoundSampleQueue<SOUND_SAMPLE_TYPE> &outputQueue,
+        std::string host,
+        std::string user,
+        std::string password)
+        : AbstractCommunicator(inputQueue, outputQueue),
+          mediaPort(inputQueue, outputQueue) {
 
     pj_status_t status;
 

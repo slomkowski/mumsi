@@ -4,15 +4,18 @@ using namespace std;
 using namespace pjsua;
 
 
-static pj_status_t getFrame(pjmedia_port *port,
-                            pjmedia_frame *frame) {
+pj_status_t pjsua::MediaPort_getFrame(pjmedia_port *port,
+                                      pjmedia_frame *frame) {
     PjsuaMediaPort *mediaPort = static_cast<PjsuaMediaPort *>(port->port_data.pdata);
     pj_int16_t *samples = static_cast<pj_int16_t *>(frame->buf);
     pj_size_t count = frame->size / 2 / PJMEDIA_PIA_CCNT(&port->info);
 
-    //todo code here
-    for (int i = 0; i < count; ++i) {
-        samples[i] = 10000.8 * (i % 10);
+    int takenSamples = mediaPort->inputQueue.pop(samples, count);
+
+    mediaPort->logger.debug("Pop %d samples from inputQueue.", takenSamples);
+
+    for (int i = takenSamples; i < count; ++i) {
+        samples[i] = 0;
     }
 
     frame->type = PJMEDIA_FRAME_TYPE_AUDIO;
@@ -20,13 +23,15 @@ static pj_status_t getFrame(pjmedia_port *port,
     return PJ_SUCCESS;
 }
 
-static pj_status_t putFrame(pjmedia_port *port,
-                            pjmedia_frame *frame) {
+pj_status_t pjsua::MediaPort_putFrame(pjmedia_port *port,
+                                      pjmedia_frame *frame) {
     PjsuaMediaPort *mediaPort = static_cast<PjsuaMediaPort *>(port->port_data.pdata);
     pj_int16_t *samples = static_cast<pj_int16_t *>(frame->buf);
     pj_size_t count = frame->size / 2 / PJMEDIA_PIA_CCNT(&port->info);
 
-    //todo code here
+    mediaPort->outputQueue.push(samples, count);
+
+    mediaPort->logger.debug("Push %d samples into outputQueue.", count);
 
     return PJ_SUCCESS;
 }
@@ -49,8 +54,8 @@ pjmedia_port *pjsua::PjsuaMediaPort::create_pjmedia_port() {
         throw pjsua::Exception("Error while calling pjmedia_port_info_init().", status);
     }
 
-    _pjmedia_port->get_frame = &getFrame;
-    _pjmedia_port->put_frame = &putFrame;
+    _pjmedia_port->get_frame = &MediaPort_getFrame;
+    _pjmedia_port->put_frame = &MediaPort_putFrame;
 
     _pjmedia_port->port_data.pdata = this;
 
