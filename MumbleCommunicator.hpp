@@ -11,6 +11,7 @@ extern "C" {
 #include <stdexcept>
 #include <opus.h>
 #include <log4cpp/Category.hh>
+#include <sndfile.hh>
 
 namespace mumble {
 
@@ -45,6 +46,8 @@ namespace mumble {
         OpusEncoder *opusEncoder;
 
         int outgoingAudioSequenceNumber;
+
+        SndfileHandle fileHandle;
     };
 }
 

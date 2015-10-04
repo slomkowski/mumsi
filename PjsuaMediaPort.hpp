@@ -5,6 +5,7 @@
 #include "AbstractCommunicator.hpp"
 
 #include <pjmedia.h>
+#include <sndfile.hh>
 
 #include <log4cpp/Category.hh>
 
@@ -35,11 +36,7 @@ namespace pjsua {
 
         PjsuaMediaPort(
                 SoundSampleQueue<SOUND_SAMPLE_TYPE> &inputQueue,
-                SoundSampleQueue<SOUND_SAMPLE_TYPE> &outputQueue)
-                : inputQueue(inputQueue),
-                  outputQueue(outputQueue),
-                  _pjmedia_port(nullptr),
-                  logger(log4cpp::Category::getInstance("PjsuaMediaPort")) { }
+                SoundSampleQueue<SOUND_SAMPLE_TYPE> &outputQueue);
 
         ~PjsuaMediaPort();
 
@@ -53,6 +50,8 @@ namespace pjsua {
         SoundSampleQueue<SOUND_SAMPLE_TYPE> &outputQueue;
 
         pjmedia_port *_pjmedia_port;
+
+        SndfileHandle fileHandle;
 
         /**
         * For PJSUA implementation reasons, these callbacks have to be functions, not methods.

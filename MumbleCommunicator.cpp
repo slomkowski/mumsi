@@ -32,10 +32,13 @@ void mumble::MumbleCommunicator::receiveAudioFrameCallback(uint8_t *audio_data, 
                                          iAudioBufferSize,
                                          0);
 
+        fileHandle.write(pcmData, decodedSamples);
+
         logger.debug("Received %d bytes of Opus data (seq %ld), decoded to %d bytes. Push it to outputQueue.",
                      opusDataLength, sequenceNumber, decodedSamples);
 
-        outputQueue.push(pcmData, decodedSamples);
+        outputQueue.push_back(pcmData, decodedSamples);
+
     } else {
         logger.warn("Received %d bytes of non-recognisable audio data.", audio_data_size);
     }
@@ -50,7 +53,7 @@ static void mumble_serversync_callback(char *welcome_text,
                                        int32_t session,
                                        int32_t max_bandwidth,
                                        int64_t permissions,
-                                       void *userData) {
+                                       void *usterData) {
     printf("%s\n", welcome_text);
 }
 
@@ -70,7 +73,11 @@ mumble::MumbleCommunicator::MumbleCommunicator(
                     logger(log4cpp::Category::getInstance("MumbleCommunicator")) {
 
     opusDecoder = opus_decoder_create(SAMPLE_RATE, 1, nullptr); //todo grab error
+
     opusEncoder = opus_encoder_create(SAMPLE_RATE, 1, OPUS_APPLICATION_VOIP, nullptr);
+    opus_encoder_ctl(opusEncoder, OPUS_SET_VBR(0));
+
+    fileHandle = SndfileHandle("capture_mumble.wav", SFM_WRITE, SF_FORMAT_WAV | SF_FORMAT_PCM_16, 1, SAMPLE_RATE);
 
     struct mumble_config config;
     std::memset(&config, 0, sizeof(config));
@@ -108,19 +115,24 @@ void mumble::MumbleCommunicator::loop() {
 
         opus_int16 pcmData[1024];
         unsigned char outputBuffer[1024];
-        int pcmLength = inputQueue.pop(pcmData, 720);
-
-        logger.debug("Pop %d samples from inputQueue.", pcmLength);
-
-        if (pcmLength > 0) {
-            int encodedSamples = opus_encode(opusEncoder, pcmData, pcmLength, outputBuffer, 1024);
-
-            logger.debug("Sending %d bytes of Opus audio data (seq %d).", encodedSamples, outgoingAudioSequenceNumber);
-
-            mumble_send_audio_data(mumble, outgoingAudioSequenceNumber, outputBuffer, encodedSamples);
-
-            outgoingAudioSequenceNumber += 2;
-        }
+//        int pcmLength = inputQueue.pop(pcmData, 960);
+//
+//        logger.debug("Pop %d samples from inputQueue.", pcmLength);
+//
+//        if (pcmLength > 0) {
+//            int encodedSamples = opus_encode(opusEncoder, pcmData, pcmLength, outputBuffer, sizeof(outputBuffer));
+//
+//            if (encodedSamples < 1) {
+//                logger.warn("opus_encode returned %d: %s", encodedSamples, opus_strerror(encodedSamples));
+//            } else {
+//                logger.debug("Sending %d bytes of Opus audio data (seq %d).", encodedSamples,
+//                             outgoingAudioSequenceNumber);
+//
+//                mumble_send_audio_data(mumble, outgoingAudioSequenceNumber, outputBuffer, encodedSamples);
+//
+//                outgoingAudioSequenceNumber += 1;
+//            }
+//        }
 
         int status = mumble_tick(mumble);
         if (status < 0) {

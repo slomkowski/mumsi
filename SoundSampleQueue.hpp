@@ -9,9 +9,9 @@
 template<typename SAMPLE_TYPE>
 class SoundSampleQueue {
 public:
-    SoundSampleQueue() {
-        start = 0;
-        stop = 0;
+    SoundSampleQueue()
+            : start(0),
+              stop(0) {
         buffer = new SAMPLE_TYPE[10000000];
     }
 
@@ -19,22 +19,26 @@ public:
         delete[] buffer;
     }
 
-    void push(SAMPLE_TYPE *data, int length) {
+    void push_back(SAMPLE_TYPE *data, int length) {
         std::lock_guard<std::mutex> lock(accessMutex);
 
-        std::memcpy(&buffer[stop], data, length);
+        for (int i = 0; i < length; ++i) {
+            buffer[stop + i] = data[i];
+        }
+
         stop += length;
-        // printf("pos: %d\n", stop);
     }
 
-    int pop(SAMPLE_TYPE *data, int maxLength) {
+    int pop_front(SAMPLE_TYPE *data, int maxLength) {
         std::lock_guard<std::mutex> lock(accessMutex);
 
         int samplesToTake = std::min(stop - start, maxLength);
-        std::memcpy(data, &buffer[stop - samplesToTake], samplesToTake);
-        stop -= samplesToTake;
 
-        //todo maksymalna pojemność bufora
+        for (int i = 0; i < samplesToTake; ++i) {
+            data[i] = buffer[start + i];
+        }
+        start += samplesToTake;
+
         return samplesToTake;
     }
 

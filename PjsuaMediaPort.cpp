@@ -10,13 +10,17 @@ pj_status_t pjsua::MediaPort_getFrame(pjmedia_port *port,
     pj_int16_t *samples = static_cast<pj_int16_t *>(frame->buf);
     pj_size_t count = frame->size / 2 / PJMEDIA_PIA_CCNT(&port->info);
 
-    int takenSamples = mediaPort->inputQueue.pop(samples, count);
+    int takenSamples = mediaPort->inputQueue.pop_front(samples, count);
+
+    mediaPort->fileHandle.write(samples, takenSamples);
 
     mediaPort->logger.debug("Pop %d samples from inputQueue.", takenSamples);
 
     for (int i = takenSamples; i < count; ++i) {
         samples[i] = 0;
     }
+
+    // todo wrzucić sample do wav
 
     frame->type = PJMEDIA_FRAME_TYPE_AUDIO;
 
@@ -29,11 +33,24 @@ pj_status_t pjsua::MediaPort_putFrame(pjmedia_port *port,
     pj_int16_t *samples = static_cast<pj_int16_t *>(frame->buf);
     pj_size_t count = frame->size / 2 / PJMEDIA_PIA_CCNT(&port->info);
 
-    mediaPort->outputQueue.push(samples, count);
-
-    mediaPort->logger.debug("Push %d samples into outputQueue.", count);
+//    if (count > 0) {
+//        mediaPort->outputQueue.push_back(samples, count);
+//
+//        mediaPort->logger.debug("Push %d samples into outputQueue.", count);
+//    }
 
     return PJ_SUCCESS;
+}
+
+PjsuaMediaPort::PjsuaMediaPort(
+        SoundSampleQueue<SOUND_SAMPLE_TYPE> &inputQueue,
+        SoundSampleQueue<SOUND_SAMPLE_TYPE> &outputQueue)
+        : inputQueue(inputQueue),
+          outputQueue(outputQueue),
+          _pjmedia_port(nullptr),
+          logger(log4cpp::Category::getInstance("PjsuaMediaPort")) {
+
+    fileHandle = SndfileHandle("capture_pjsua.wav", SFM_WRITE, SF_FORMAT_WAV | SF_FORMAT_PCM_16, 1, SAMPLING_RATE);
 }
 
 pjmedia_port *pjsua::PjsuaMediaPort::create_pjmedia_port() {
