@@ -6,6 +6,8 @@
 
 #include <functional>
 
+#include <cstring>
+
 //todo wywalić
 #define THIS_FILE "mumsi"
 
@@ -59,28 +61,24 @@ static void onCallState(pjsua_call_id call_id,
             ci.state_text.ptr));
 }
 
-
-pjsua::PjsuaCommunicator::PjsuaCommunicator(
-        SoundSampleQueue<SOUND_SAMPLE_TYPE> &inputQueue,
-        SoundSampleQueue<SOUND_SAMPLE_TYPE> &outputQueue,
+sip::PjsuaCommunicator::PjsuaCommunicator(
         std::string host,
         std::string user,
-        std::string password)
-        : AbstractCommunicator(inputQueue, outputQueue),
-          mediaPort(inputQueue, outputQueue) {
+        std::string password) : logger(log4cpp::Category::getInstance("SipCommunicator")),
+                                callbackLogger(log4cpp::Category::getInstance("SipCommunicatorCallback")) {
 
     pj_status_t status;
 
     status = pjsua_create();
     if (status != PJ_SUCCESS) {
-        throw pjsua::Exception("Error in pjsua_create()", status);
+        throw sip::Exception("Error in pjsua_create()", status);
     }
 
-    /* Init pjsua */
     pjsua_config generalConfig;
     pjsua_config_default(&generalConfig);
 
-    using namespace std::placeholders;
+    generalConfig.user_agent = toPjString("Mumsi Mumble-SIP Bridge");
+    generalConfig.max_calls = 1;
 
     generalConfig.cb.on_incoming_call = &onIncomingCall;
     generalConfig.cb.on_call_media_state = &onCallMediaState;
@@ -94,37 +92,128 @@ pjsua::PjsuaCommunicator::PjsuaCommunicator(
 
     status = pjsua_init(&generalConfig, &logConfig, NULL);
     if (status != PJ_SUCCESS) {
-        throw pjsua::Exception("Error in pjsua_init()", status);
+        throw sip::Exception("Error in pjsua_init()", status);
     }
+
+    pjsua_set_null_snd_dev();
 
     /* Add UDP transport. */
     pjsua_transport_config transportConfig;
     pjsua_transport_config_default(&transportConfig);
 
-    transportConfig.port = pjsua::SIP_PORT;
+    transportConfig.port = sip::SIP_PORT;
 
     status = pjsua_transport_create(PJSIP_TRANSPORT_UDP, &transportConfig, NULL);
     if (status != PJ_SUCCESS) {
-        throw pjsua::Exception("Error creating transport", status);
+        throw sip::Exception("Error creating transport", status);
     }
-
-    pjsua_set_null_snd_dev();
 
     pj_caching_pool cachingPool;
     pj_caching_pool_init(&cachingPool, &pj_pool_factory_default_policy, 0);
-    pj_pool_t *pool = pj_pool_create(&cachingPool.factory, "wav", 4096, 4096, nullptr);
+    pj_pool_t *pool = pj_pool_create(&cachingPool.factory, "wav", 32768, 8192, nullptr);
 
-    pjsua_conf_add_port(pool, mediaPort.create_pjmedia_port(), &mediaPortSlot);
+    // create circular buffers
+    pjmedia_circ_buf_create(pool, 960 * 10, &inputBuff);
+    pjmedia_circ_buf_create(pool, 960 * 10, &outputBuff);
 
-    /* Initialization is done, now start pjsua */
+    mediaPort = createMediaPort();
+
+    pjsua_conf_add_port(pool, mediaPort, &mediaPortSlot);
+
+    /* Initialization is done, now start sip */
     status = pjsua_start();
     if (status != PJ_SUCCESS) {
-        throw pjsua::Exception("Error starting pjsua", status);
+        throw sip::Exception("Error starting sip", status);
     }
 
-    /* Register to SIP server by creating SIP account. */
-    pjsua_acc_config accConfig;
+    registerAccount(host, user, password);
+}
 
+sip::PjsuaCommunicator::~PjsuaCommunicator() {
+    pjsua_destroy();
+}
+
+pjmedia_port *sip::PjsuaCommunicator::createMediaPort() {
+
+    pjmedia_port *mp = new pjmedia_port();
+
+    pj_str_t name = toPjString("Pjsuamp");
+
+    pj_status_t status = pjmedia_port_info_init(&(mp->info),
+                                                &name,
+                                                PJMEDIA_SIG_CLASS_PORT_AUD('s', 'i'),
+                                                SAMPLING_RATE,
+                                                1,
+                                                16,
+                                                SAMPLING_RATE * 20 / 1000); // todo recalculate to match mumble specs
+
+    if (status != PJ_SUCCESS) {
+        throw sip::Exception("error while calling pjmedia_port_info_init().", status);
+    }
+
+    mp->get_frame = &MediaPort_getFrameRawCallback;
+    mp->put_frame = &MediaPort_putFrameRawCallback;
+
+    mp->port_data.pdata = this;
+
+    return mp;
+}
+
+pj_status_t sip::MediaPort_getFrameRawCallback(pjmedia_port *port,
+                                               pjmedia_frame *frame) {
+    PjsuaCommunicator *communicator = static_cast<PjsuaCommunicator *>(port->port_data.pdata);
+    frame->type = PJMEDIA_FRAME_TYPE_AUDIO;
+
+    return communicator->mediaPortGetFrame(frame);
+}
+
+pj_status_t sip::MediaPort_putFrameRawCallback(pjmedia_port *port,
+                                               pjmedia_frame *frame) {
+    PjsuaCommunicator *communicator = static_cast<PjsuaCommunicator *>(port->port_data.pdata);
+    pj_int16_t *samples = static_cast<pj_int16_t *>(frame->buf);
+    pj_size_t count = frame->size / 2 / PJMEDIA_PIA_CCNT(&port->info);
+    frame->type = PJMEDIA_FRAME_TYPE_AUDIO;
+
+    communicator->mediaPortPutFrame(samples, count);
+
+    return PJ_SUCCESS;
+}
+
+pj_status_t sip::PjsuaCommunicator::mediaPortGetFrame(pjmedia_frame *frame) {
+    std::unique_lock<std::mutex> lock(inBuffAccessMutex);
+
+    pj_int16_t *samples = static_cast<pj_int16_t *>(frame->buf);
+    pj_size_t count = frame->size / 2 / PJMEDIA_PIA_CCNT(&mediaPort->info);
+
+    pj_size_t availableSamples = pjmedia_circ_buf_get_len(inputBuff);
+    const int samplesToRead = std::min(count, availableSamples);
+
+    callbackLogger.debug("Pulling %d samples from in-buff.", samplesToRead);
+    pjmedia_circ_buf_read(inputBuff, samples, samplesToRead);
+
+    if (availableSamples < count) {
+        callbackLogger.debug("Requested %d samples, available %d, filling remaining with zeros.", count,
+                             availableSamples);
+        std::memset(&(samples[availableSamples]), 0, sizeof(pj_int16_t) * (count - availableSamples));
+    }
+
+    return PJ_SUCCESS;
+}
+
+void sip::PjsuaCommunicator::mediaPortPutFrame(pj_int16_t *samples, pj_size_t count) {
+    std::unique_lock<std::mutex> lock(outBuffAccessMutex);
+
+    callbackLogger.debug("Pushing %d samples to out-buff.", count);
+    pjmedia_circ_buf_write(outputBuff, samples, count);
+
+    lock.unlock();
+
+    outBuffCondVar.notify_all();
+}
+
+void sip::PjsuaCommunicator::registerAccount(string host, string user, string password) {
+
+    pjsua_acc_config accConfig;
     pjsua_acc_config_default(&accConfig);
 
     accConfig.id = toPjString(string("sip:") + user + "@" + host);
@@ -138,16 +227,33 @@ pjsua::PjsuaCommunicator::PjsuaCommunicator(
     accConfig.cred_info[0].data = toPjString(password);
 
     pjsua_acc_id acc_id;
-    status = pjsua_acc_add(&accConfig, PJ_TRUE, &acc_id);
+
+    pj_status_t status = pjsua_acc_add(&accConfig, PJ_TRUE, &acc_id);
     if (status != PJ_SUCCESS) {
-        throw pjsua::Exception("Error adding account", status);
+        throw sip::Exception("failed to register account", status);
     }
 }
 
-pjsua::PjsuaCommunicator::~PjsuaCommunicator() {
-    pjsua_destroy();
+void sip::PjsuaCommunicator::pushSamples(int16_t *samples, unsigned int length) {
+    std::unique_lock<std::mutex> lock(inBuffAccessMutex);
+    callbackLogger.debug("Pushing %d samples to in-buff.", length);
+    pjmedia_circ_buf_write(inputBuff, samples, length);
 }
 
-void pjsua::PjsuaCommunicator::loop() {
+unsigned int sip::PjsuaCommunicator::pullSamples(int16_t *samples, unsigned int length, bool waitWhenEmpty) {
+    std::unique_lock<std::mutex> lock(outBuffAccessMutex);
 
+    unsigned int availableSamples;
+
+    while ((availableSamples = pjmedia_circ_buf_get_len(inputBuff)) < length) {
+        callbackLogger.debug("Not enough samples in buffer: %d, requested %d. Waiting.", availableSamples, length);
+        outBuffCondVar.wait(lock);
+    }
+
+    const int samplesToRead = std::min(length, availableSamples);
+
+    callbackLogger.debug("Pulling %d samples from out-buff.", samplesToRead);
+    pjmedia_circ_buf_read(inputBuff, samples, samplesToRead);
+
+    return samplesToRead;
 }

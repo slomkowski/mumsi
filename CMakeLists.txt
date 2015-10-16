@@ -23,15 +23,14 @@ link_directories(libmumble)
 
 set(SOURCE_FILES
         PjsuaCommunicator.cpp
-        PjsuaMediaPort.cpp
+        PjsuaCommunicator.hpp
         MumbleCommunicator.cpp
-        SoundSampleQueue.cpp
-        AbstractCommunicator.hpp
-)
+        MumbleCommunicator.hpp
+        ISamplesBuffer.hpp)
 
-set(TEST_SOURCE_FILES
-        SoundSampleQueueTest.cpp
-)
+#set(TEST_SOURCE_FILES
+#        SoundSampleQueueTest.cpp
+#)
 
 add_executable(mumsi ${SOURCE_FILES} main.cpp)
 target_link_libraries(mumsi ${OPUS_LIBRARIES})
@@ -41,10 +40,10 @@ target_link_libraries(mumsi ${SNDFILE_LIBRARIES})
 target_link_libraries(mumsi ${Boost_LIBRARIES})
 target_link_libraries(mumsi mumble)
 
-add_executable(mumsi_test ${SOURCE_FILES} ${TEST_SOURCE_FILES} test_main.cpp)
-target_link_libraries(mumsi_test ${OPUS_LIBRARIES})
-target_link_libraries(mumsi_test ${PJSIP_LIBRARIES})
-target_link_libraries(mumsi_test ${LOG4CPP_LIBRARIES})
-target_link_libraries(mumsi_test ${SNDFILE_LIBRARIES})
-target_link_libraries(mumsi_test ${Boost_LIBRARIES})
-target_link_libraries(mumsi_test mumble)
+#add_executable(mumsi_test ${SOURCE_FILES} ${TEST_SOURCE_FILES} test_main.cpp)
+#target_link_libraries(mumsi_test ${OPUS_LIBRARIES})
+#target_link_libraries(mumsi_test ${PJSIP_LIBRARIES})
+#target_link_libraries(mumsi_test ${LOG4CPP_LIBRARIES})
+#target_link_libraries(mumsi_test ${SNDFILE_LIBRARIES})
+#target_link_libraries(mumsi_test ${Boost_LIBRARIES})
+#target_link_libraries(mumsi_test mumble)

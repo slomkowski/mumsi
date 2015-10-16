@@ -37,7 +37,7 @@ void mumble::MumbleCommunicator::receiveAudioFrameCallback(uint8_t *audio_data, 
         logger.debug("Received %d bytes of Opus data (seq %ld), decoded to %d bytes. Push it to outputQueue.",
                      opusDataLength, sequenceNumber, decodedSamples);
 
-        outputQueue.push_back(pcmData, decodedSamples);
+        samplesBuffer.pushSamples(pcmData, decodedSamples);
 
     } else {
         logger.warn("Received %d bytes of non-recognisable audio data.", audio_data_size);
@@ -63,14 +63,15 @@ static int verify_cert(uint8_t *, uint32_t) {
 }
 
 mumble::MumbleCommunicator::MumbleCommunicator(
-        SoundSampleQueue<SOUND_SAMPLE_TYPE> &inputQueue,
-        SoundSampleQueue<SOUND_SAMPLE_TYPE> &outputQueue,
+        ISamplesBuffer &samplesBuffer,
         std::string user,
         std::string password,
         std::string host,
-        int port) : AbstractCommunicator(inputQueue, outputQueue),
+        int port) : samplesBuffer(samplesBuffer),
                     outgoingAudioSequenceNumber(1),
                     logger(log4cpp::Category::getInstance("MumbleCommunicator")) {
+
+    quit = false;
 
     opusDecoder = opus_decoder_create(SAMPLE_RATE, 1, nullptr); //todo grab error
 
@@ -110,31 +111,12 @@ mumble::MumbleCommunicator::~MumbleCommunicator() {
 }
 
 void mumble::MumbleCommunicator::loop() {
-    int quit = 0;
-    while (quit == 0) {
 
-        opus_int16 pcmData[1024];
-        unsigned char outputBuffer[1024];
-//        int pcmLength = inputQueue.pop(pcmData, 960);
-//
-//        logger.debug("Pop %d samples from inputQueue.", pcmLength);
-//
-//        if (pcmLength > 0) {
-//            int encodedSamples = opus_encode(opusEncoder, pcmData, pcmLength, outputBuffer, sizeof(outputBuffer));
-//
-//            if (encodedSamples < 1) {
-//                logger.warn("opus_encode returned %d: %s", encodedSamples, opus_strerror(encodedSamples));
-//            } else {
-//                logger.debug("Sending %d bytes of Opus audio data (seq %d).", encodedSamples,
-//                             outgoingAudioSequenceNumber);
-//
-//                mumble_send_audio_data(mumble, outgoingAudioSequenceNumber, outputBuffer, encodedSamples);
-//
-//                outgoingAudioSequenceNumber += 1;
-//            }
-//        }
+    senderThread.reset(new std::thread(&MumbleCommunicator::senderThreadFunction, this));
 
+    while (!quit) {
         int status = mumble_tick(mumble);
+        logger.debug("tick");
         if (status < 0) {
             throw mumble::Exception("mumble_tick status " + status);
         }
@@ -144,3 +126,27 @@ void mumble::MumbleCommunicator::loop() {
 }
 
 
+void mumble::MumbleCommunicator::senderThreadFunction() {
+    while (!quit) {
+        opus_int16 pcmData[1024];
+        unsigned char outputBuffer[1024];
+
+        int pcmLength = samplesBuffer.pullSamples(pcmData, 960, true);
+
+        logger.debug("Pop %d samples from inputQueue.", pcmLength);
+
+        int encodedSamples = opus_encode(opusEncoder, pcmData, pcmLength, outputBuffer, sizeof(outputBuffer));
+
+        if (encodedSamples < 1) {
+            logger.warn("opus_encode returned %d: %s", encodedSamples, opus_strerror(encodedSamples));
+        } else {
+//            logger.debug("Sending %d bytes of Opus audio data (seq %d).", encodedSamples,
+//                         outgoingAudioSequenceNumber);
+//
+//            //todo to powinno dać się bezpiecznie wykonać w osobnym wątku
+//            mumble_send_audio_data(mumble, outgoingAudioSequenceNumber, outputBuffer, encodedSamples);
+//
+//            outgoingAudioSequenceNumber += 1;
+        }
+    }
+}
