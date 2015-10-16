@@ -112,7 +112,7 @@ mumble::MumbleCommunicator::~MumbleCommunicator() {
 
 void mumble::MumbleCommunicator::loop() {
 
-    senderThread.reset(new std::thread(&MumbleCommunicator::senderThreadFunction, this));
+    //senderThread.reset(new std::thread(&MumbleCommunicator::senderThreadFunction, this));
 
     while (!quit) {
         int status = mumble_tick(mumble);

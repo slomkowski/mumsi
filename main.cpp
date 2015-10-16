@@ -18,7 +18,7 @@ int main(int argc, char *argv[]) {
     log4cpp::Appender *appender1 = new log4cpp::OstreamAppender("console", &std::cout);
     appender1->setLayout(new log4cpp::BasicLayout());
     log4cpp::Category &logger = log4cpp::Category::getRoot();
-    logger.setPriority(log4cpp::Priority::NOTICE);
+    logger.setPriority(log4cpp::Priority::INFO);
     logger.addAppender(appender1);
 
 

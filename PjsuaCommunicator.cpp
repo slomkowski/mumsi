@@ -194,7 +194,10 @@ pj_status_t sip::PjsuaCommunicator::mediaPortGetFrame(pjmedia_frame *frame) {
     if (availableSamples < count) {
         callbackLogger.debug("Requested %d samples, available %d, filling remaining with zeros.", count,
                              availableSamples);
-        std::memset(&(samples[availableSamples]), 0, sizeof(pj_int16_t) * (count - availableSamples));
+
+        for (int i = samplesToRead; i < count; ++i) {
+            samples[i] = 0;
+        }
     }
 
     return PJ_SUCCESS;
