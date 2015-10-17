@@ -1,0 +1,11 @@
+[sip]
+host = sip.example.org
+port = 5060
+user = mumsi
+password = foobar
+
+[mumble]
+host = example.org
+port = 64738
+user = mumsi
+password = foobar

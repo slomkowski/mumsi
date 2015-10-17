@@ -5,29 +5,35 @@
 #include "PjsuaCommunicator.hpp"
 #include "MumbleCommunicator.hpp"
 
-#define SIP_DOMAIN "sip.antisip.com"
-#define SIP_USER "melangtone"
-#define SIP_PASSWD "b8DU9AZXbd9tVCWg"
-
-#define MUMBLE_DOMAIN "1con.pl"
-#define MUMBLE_USER "mumsi"
-#define MUMBLE_PASSWD "kiwi"
+#include "Configuration.hpp"
 
 int main(int argc, char *argv[]) {
 
     log4cpp::Appender *appender1 = new log4cpp::OstreamAppender("console", &std::cout);
     appender1->setLayout(new log4cpp::BasicLayout());
     log4cpp::Category &logger = log4cpp::Category::getRoot();
-    logger.setPriority(log4cpp::Priority::INFO);
+    logger.setPriority(log4cpp::Priority::DEBUG);
     logger.addAppender(appender1);
 
+    if (argc == 1) {
+        logger.crit("No configuration file provided. Use %s {config file}", argv[0]);
+        return 1;
+    }
+
+    config::Configuration conf(argv[1]);
 
     sip::PjsuaCommunicator pjsuaCommunicator(
-            SIP_DOMAIN, SIP_USER, SIP_PASSWD);
+            conf.getString("sip.host"),
+            conf.getString("sip.user"),
+            conf.getString("sip.password"),
+            conf.getInt("sip.port"));
 
     mumble::MumbleCommunicator mumbleCommunicator(
             pjsuaCommunicator,
-            MUMBLE_USER, MUMBLE_PASSWD, MUMBLE_DOMAIN);
+            conf.getString("mumble.user"),
+            conf.getString("mumble.password"),
+            conf.getString("mumble.host"),
+            conf.getInt("mumble.port"));
 
     logger.info("Application started.");
 

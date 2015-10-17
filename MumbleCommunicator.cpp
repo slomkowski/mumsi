@@ -57,6 +57,18 @@ static void mumble_serversync_callback(char *welcome_text,
     printf("%s\n", welcome_text);
 }
 
+void mumble_cryptsetup_callback(uint32_t key_size,
+                                uint8_t *key,
+                                uint32_t client_nonce_size,
+                                uint8_t *client_nonce,
+                                uint32_t server_nonce_size,
+                                uint8_t *server_nonce,
+                                void *userData) {
+    mumble::MumbleCommunicator *mumbleCommunicator = static_cast<mumble::MumbleCommunicator *>(userData);
+    printf("received crypto nonce\n");
+}
+
+
 static int verify_cert(uint8_t *, uint32_t) {
     // Accept every cert
     return 1;
@@ -98,6 +110,7 @@ mumble::MumbleCommunicator::MumbleCommunicator(
     config.ssl_verification_callback = verify_cert;
     config.audio_callback = mumble_audio_callback;
     config.serversync_callback = mumble_serversync_callback;
+    config.cryptsetup_callback = mumble_cryptsetup_callback;
 
     mumble = mumble_connect(nullptr, &config);
 
@@ -112,7 +125,7 @@ mumble::MumbleCommunicator::~MumbleCommunicator() {
 
 void mumble::MumbleCommunicator::loop() {
 
-    //senderThread.reset(new std::thread(&MumbleCommunicator::senderThreadFunction, this));
+    senderThread.reset(new std::thread(&MumbleCommunicator::senderThreadFunction, this));
 
     while (!quit) {
         int status = mumble_tick(mumble);
@@ -131,7 +144,7 @@ void mumble::MumbleCommunicator::senderThreadFunction() {
         opus_int16 pcmData[1024];
         unsigned char outputBuffer[1024];
 
-        int pcmLength = samplesBuffer.pullSamples(pcmData, 960, true);
+        int pcmLength = samplesBuffer.pullSamples(pcmData, 480, true);
 
         logger.debug("Pop %d samples from inputQueue.", pcmLength);
 
@@ -140,13 +153,13 @@ void mumble::MumbleCommunicator::senderThreadFunction() {
         if (encodedSamples < 1) {
             logger.warn("opus_encode returned %d: %s", encodedSamples, opus_strerror(encodedSamples));
         } else {
-//            logger.debug("Sending %d bytes of Opus audio data (seq %d).", encodedSamples,
-//                         outgoingAudioSequenceNumber);
-//
-//            //todo to powinno dać się bezpiecznie wykonać w osobnym wątku
-//            mumble_send_audio_data(mumble, outgoingAudioSequenceNumber, outputBuffer, encodedSamples);
-//
-//            outgoingAudioSequenceNumber += 1;
+            logger.debug("Sending %d bytes of Opus audio data (seq %d).", encodedSamples,
+                         outgoingAudioSequenceNumber);
+
+            //todo to powinno dać się bezpiecznie wykonać w osobnym wątku
+            mumble_send_audio_data(mumble, outgoingAudioSequenceNumber, outputBuffer, encodedSamples);
+
+            outgoingAudioSequenceNumber += 1;
         }
     }
 }

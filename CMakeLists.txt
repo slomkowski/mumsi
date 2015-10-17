@@ -26,7 +26,9 @@ set(SOURCE_FILES
         PjsuaCommunicator.hpp
         MumbleCommunicator.cpp
         MumbleCommunicator.hpp
-        ISamplesBuffer.hpp)
+        ISamplesBuffer.hpp
+        Configuration.cpp
+        Configuration.hpp)
 
 #set(TEST_SOURCE_FILES
 #        SoundSampleQueueTest.cpp

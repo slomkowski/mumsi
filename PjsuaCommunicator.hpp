@@ -14,7 +14,7 @@
 
 namespace sip {
 
-    constexpr int SIP_PORT = 5060;
+    constexpr int DEFAULT_PORT = 5060;
     constexpr int SAMPLING_RATE = 48000;
 
     class Exception : public std::runtime_error {
@@ -49,7 +49,8 @@ namespace sip {
         PjsuaCommunicator(
                 std::string host,
                 std::string user,
-                std::string password);
+                std::string password,
+                unsigned int port = DEFAULT_PORT);
 
         ~PjsuaCommunicator();
 

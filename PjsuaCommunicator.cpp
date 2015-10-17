@@ -64,8 +64,9 @@ static void onCallState(pjsua_call_id call_id,
 sip::PjsuaCommunicator::PjsuaCommunicator(
         std::string host,
         std::string user,
-        std::string password) : logger(log4cpp::Category::getInstance("SipCommunicator")),
-                                callbackLogger(log4cpp::Category::getInstance("SipCommunicatorCallback")) {
+        std::string password,
+        unsigned int port) : logger(log4cpp::Category::getInstance("SipCommunicator")),
+                             callbackLogger(log4cpp::Category::getInstance("SipCommunicatorCallback")) {
 
     pj_status_t status;
 
@@ -101,7 +102,7 @@ sip::PjsuaCommunicator::PjsuaCommunicator(
     pjsua_transport_config transportConfig;
     pjsua_transport_config_default(&transportConfig);
 
-    transportConfig.port = sip::SIP_PORT;
+    transportConfig.port = port;
 
     status = pjsua_transport_create(PJSIP_TRANSPORT_UDP, &transportConfig, NULL);
     if (status != PJ_SUCCESS) {
