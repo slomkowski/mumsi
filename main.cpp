@@ -22,6 +22,8 @@ int main(int argc, char *argv[]) {
 
     config::Configuration conf(argv[1]);
 
+    boost::asio::io_service ioService;
+
     sip::PjsuaCommunicator pjsuaCommunicator(
             conf.getString("sip.host"),
             conf.getString("sip.user"),
@@ -29,6 +31,7 @@ int main(int argc, char *argv[]) {
             conf.getInt("sip.port"));
 
     mumble::MumbleCommunicator mumbleCommunicator(
+            ioService,
             pjsuaCommunicator,
             conf.getString("mumble.user"),
             conf.getString("mumble.password"),
@@ -37,8 +40,7 @@ int main(int argc, char *argv[]) {
 
     logger.info("Application started.");
 
-    mumbleCommunicator.loop();
-
+    ioService.run();
 
     return 0;
 }
