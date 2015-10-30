@@ -1,3 +1,0 @@
-[submodule "libmumble"]
-	path = libmumble
-	url = https://github.com/slomkowski/libmumble.git
