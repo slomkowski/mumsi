@@ -38,12 +38,10 @@ mumble::MumbleCommunicator::MumbleCommunicator(
     mum->connect(host, port, user, password);
 }
 
+void mumble::MumbleCommunicator::sendAudioFrame(int16_t *samples, int length) {
+    mum->sendAudioData(samples, length);
+}
+
 mumble::MumbleCommunicator::~MumbleCommunicator() {
     mum->disconnect();
 }
-//
-//void mumble::MumbleCommunicator::senderThreadFunction() {
-//    while (!quit) {
-//
-//    }
-//}

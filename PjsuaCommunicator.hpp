@@ -46,7 +46,9 @@ namespace sip {
 
     class PjsuaCommunicator : public ISamplesBuffer {
     public:
-        PjsuaCommunicator(
+        PjsuaCommunicator();
+
+        void connect(
                 std::string host,
                 std::string user,
                 std::string password,
@@ -56,7 +58,9 @@ namespace sip {
 
         virtual void pushSamples(int16_t *samples, unsigned int length);
 
-        virtual unsigned int pullSamples(int16_t *samples, unsigned int length, bool waitWhenEmpty);
+        std::function<void(int16_t *, int)> onIncomingSamples;
+
+//        virtual unsigned int pullSamples(int16_t *samples, unsigned int length, bool waitWhenEmpty);
 
     private:
         log4cpp::Category &logger;
@@ -72,6 +76,7 @@ namespace sip {
 
         std::mutex outBuffAccessMutex;
         std::condition_variable outBuffCondVar;
+
 
         // todo make it completely stateless
         pjmedia_port *createMediaPort();

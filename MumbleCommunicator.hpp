@@ -35,6 +35,7 @@ namespace mumble {
 
         //void receiveAudioFrameCallback(uint8_t *audio_data, uint32_t audio_data_size);
 
+        void sendAudioFrame(int16_t *samples, int length);
 
     public:
         boost::asio::io_service &ioService;

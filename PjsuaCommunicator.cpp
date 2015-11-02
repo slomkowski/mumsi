@@ -61,12 +61,17 @@ static void onCallState(pjsua_call_id call_id,
             ci.state_text.ptr));
 }
 
-sip::PjsuaCommunicator::PjsuaCommunicator(
+sip::PjsuaCommunicator::PjsuaCommunicator()
+        : logger(log4cpp::Category::getInstance("SipCommunicator")),
+          callbackLogger(log4cpp::Category::getInstance("SipCommunicatorCallback")) {
+
+}
+
+void sip::PjsuaCommunicator::connect(
         std::string host,
         std::string user,
         std::string password,
-        unsigned int port) : logger(log4cpp::Category::getInstance("SipCommunicator")),
-                             callbackLogger(log4cpp::Category::getInstance("SipCommunicatorCallback")) {
+        unsigned int port) {
 
     pj_status_t status;
 
@@ -205,14 +210,17 @@ pj_status_t sip::PjsuaCommunicator::mediaPortGetFrame(pjmedia_frame *frame) {
 }
 
 void sip::PjsuaCommunicator::mediaPortPutFrame(pj_int16_t *samples, pj_size_t count) {
-    std::unique_lock<std::mutex> lock(outBuffAccessMutex);
-
-    callbackLogger.debug("Pushing %d samples to out-buff.", count);
-    pjmedia_circ_buf_write(outputBuff, samples, count);
-
-    lock.unlock();
-
-    outBuffCondVar.notify_all();
+//    std::unique_lock<std::mutex> lock(outBuffAccessMutex);
+//
+//    callbackLogger.debug("Pushing %d samples to out-buff.", count);
+//    pjmedia_circ_buf_write(outputBuff, samples, count);
+//
+//    lock.unlock();
+//
+//    outBuffCondVar.notify_all();
+    if (count > 0) {
+        onIncomingSamples(samples, count);
+    }
 }
 
 void sip::PjsuaCommunicator::registerAccount(string host, string user, string password) {
@@ -244,20 +252,20 @@ void sip::PjsuaCommunicator::pushSamples(int16_t *samples, unsigned int length) 
     pjmedia_circ_buf_write(inputBuff, samples, length);
 }
 
-unsigned int sip::PjsuaCommunicator::pullSamples(int16_t *samples, unsigned int length, bool waitWhenEmpty) {
-    std::unique_lock<std::mutex> lock(outBuffAccessMutex);
-
-    unsigned int availableSamples;
-
-    while ((availableSamples = pjmedia_circ_buf_get_len(inputBuff)) < length) {
-        callbackLogger.debug("Not enough samples in buffer: %d, requested %d. Waiting.", availableSamples, length);
-        outBuffCondVar.wait(lock);
-    }
-
-    const int samplesToRead = std::min(length, availableSamples);
-
-    callbackLogger.debug("Pulling %d samples from out-buff.", samplesToRead);
-    pjmedia_circ_buf_read(inputBuff, samples, samplesToRead);
-
-    return samplesToRead;
-}
+//unsigned int sip::PjsuaCommunicator::pullSamples(int16_t *samples, unsigned int length, bool waitWhenEmpty) {
+//    std::unique_lock<std::mutex> lock(outBuffAccessMutex);
+//
+//    unsigned int availableSamples;
+//
+//    while ((availableSamples = pjmedia_circ_buf_get_len(inputBuff)) < length) {
+//        callbackLogger.debug("Not enough samples in buffer: %d, requested %d. Waiting.", availableSamples, length);
+//        outBuffCondVar.wait(lock);
+//    }
+//
+//    const int samplesToRead = std::min(length, availableSamples);
+//
+//    callbackLogger.debug("Pulling %d samples from out-buff.", samplesToRead);
+//    pjmedia_circ_buf_read(inputBuff, samples, samplesToRead);
+//
+//    return samplesToRead;
+//}
