@@ -44,3 +44,7 @@ void mumble::MumbleCommunicator::sendPcmSamples(int16_t *samples, unsigned int l
 mumble::MumbleCommunicator::~MumbleCommunicator() {
     mum->disconnect();
 }
+
+void mumble::MumbleCommunicator::sendTextMessage(std::string message) {
+    mum->sendTextMessage(message);
+}

@@ -32,6 +32,8 @@ namespace mumble {
 
         virtual void sendPcmSamples(int16_t *samples, unsigned int length);
 
+        void sendTextMessage(std::string message);
+
     public:
         boost::asio::io_service &ioService;
 

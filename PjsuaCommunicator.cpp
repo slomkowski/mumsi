@@ -3,13 +3,15 @@
 #include <pjlib.h>
 #include <pjsua-lib/pjsua.h>
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/format.hpp>
 
 using namespace std;
 
 /**
- * This is global, because there's no way to pass it's value to onCallMediaState callback.
+ * These are global, because there's no way to pass it's value to onCallMediaState callback.
  */
 static int mediaPortSlot;
+static sip::PjsuaCommunicator *pjsuaCommunicator = nullptr;
 
 static log4cpp::Category &pjLogger = log4cpp::Category::getInstance("PjSip");
 
@@ -34,11 +36,17 @@ static void onIncomingCall(pjsua_acc_id acc_id,
     PJ_UNUSED_ARG(rdata);
 
     pjsua_call_get_info(call_id, &ci);
+    pjsua_call_set_user_data(call_id, pjsuaCommunicator);
 
-    pjLogger.notice("Incoming call from %s.", ci.remote_info.ptr);
+    pjLogger.info("Incoming call from %s.", ci.remote_info.ptr);
 
     /* Automatically answer incoming calls with 200/OK */
     pjsua_call_answer(call_id, 200, NULL, NULL);
+}
+
+static void onDtmfDigit(pjsua_call_id callId, int digit) {
+
+    pjLogger.notice("DTMF digit '%c' (call %d).", digit, callId);
 }
 
 static void onCallState(pjsua_call_id call_id,
@@ -48,7 +56,23 @@ static void onCallState(pjsua_call_id call_id,
     PJ_UNUSED_ARG(e);
 
     pjsua_call_get_info(call_id, &ci);
-    pjLogger.notice("Call %d state=%s.", call_id, ci.state_text.ptr);
+    sip::PjsuaCommunicator *communicator
+            = reinterpret_cast<sip::PjsuaCommunicator *>(pjsua_call_get_user_data(call_id));
+
+    pjLogger.info("Call %d state=%s.", call_id, ci.state_text.ptr);
+
+    string address = string(ci.remote_info.ptr);
+    address = address.substr(5, address.size() - 5 - 1);
+
+    if (ci.state == PJSIP_INV_STATE_CONFIRMED) {
+        auto msgText = "Start call from " + address + ".";
+        pjLogger.notice(msgText);
+        communicator->onStateChange(msgText);
+    } else if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
+        auto msgText = "End call from " + address + ".";
+        pjLogger.notice(msgText);
+        communicator->onStateChange(msgText);
+    }
 }
 
 static void pjLogToLog4CppBridgeFunction(int level, const char *data, int len) {
@@ -74,6 +98,11 @@ sip::PjsuaCommunicator::PjsuaCommunicator()
           callbackLogger(log4cpp::Category::getInstance("SipCommunicatorCallback")) {
     pj_status_t status;
 
+    if (pjsuaCommunicator != nullptr) {
+        throw sip::Exception("this is a singleton class");
+    }
+    pjsuaCommunicator = this;
+
     status = pjsua_create();
     if (status != PJ_SUCCESS) {
         throw sip::Exception("Error in pjsua_create()", status);
@@ -90,6 +119,7 @@ sip::PjsuaCommunicator::PjsuaCommunicator()
     generalConfig.max_calls = 1;
 
     generalConfig.cb.on_incoming_call = &onIncomingCall;
+    generalConfig.cb.on_dtmf_digit = &onDtmfDigit;
     generalConfig.cb.on_call_media_state = &onCallMediaState;
     generalConfig.cb.on_call_state = &onCallState;
 
@@ -161,7 +191,8 @@ pjmedia_port *sip::PjsuaCommunicator::createMediaPort() {
                                                 SAMPLING_RATE,
                                                 1,
                                                 16,
-                                                SAMPLING_RATE * 20 / 1000); // todo recalculate to match mumble specs
+                                                SAMPLING_RATE * 20 /
+                                                1000); // todo recalculate to match mumble specs
 
     if (status != PJ_SUCCESS) {
         throw sip::Exception("error while calling pjmedia_port_info_init().", status);
@@ -253,13 +284,6 @@ void sip::PjsuaCommunicator::registerAccount(string host, string user, string pa
     accConfig.cred_info[0].username = toPjString(user);
     accConfig.cred_info[0].data_type = PJSIP_CRED_DATA_PLAIN_PASSWD;
     accConfig.cred_info[0].data = toPjString(password);
-
-    logger.error("id:%s", accConfig.id.ptr);
-    logger.error("reg_uri:%s", accConfig.reg_uri.ptr);
-    logger.error("realm:%s", accConfig.cred_info[0].realm.ptr);
-    logger.error("scheme:%s", accConfig.cred_info[0].scheme.ptr);
-    logger.error("username:%s", accConfig.cred_info[0].username.ptr);
-    logger.error("data:%s", accConfig.cred_info[0].data.ptr);
 
     pjsua_acc_id acc_id;
 

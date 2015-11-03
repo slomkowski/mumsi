@@ -12,7 +12,7 @@ int main(int argc, char *argv[]) {
     log4cpp::Appender *appender1 = new log4cpp::OstreamAppender("console", &std::cout);
     appender1->setLayout(new log4cpp::BasicLayout());
     log4cpp::Category &logger = log4cpp::Category::getRoot();
-    logger.setPriority(log4cpp::Priority::DEBUG);
+    logger.setPriority(log4cpp::Priority::NOTICE);
     logger.addAppender(appender1);
 
     if (argc == 1) {
@@ -33,6 +33,10 @@ int main(int argc, char *argv[]) {
             &mumble::MumbleCommunicator::sendPcmSamples,
             &mumbleCommunicator,
             _1, _2);
+
+    pjsuaCommunicator.onStateChange = std::bind(
+            &mumble::MumbleCommunicator::sendTextMessage,
+            &mumbleCommunicator, _1);
 
     mumbleCommunicator.onIncomingPcmSamples = std::bind(
             &sip::PjsuaCommunicator::sendPcmSamples,

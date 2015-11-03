@@ -18,6 +18,10 @@ namespace sip {
 
     class Exception : public std::runtime_error {
     public:
+        Exception(const char *title) : std::runtime_error(title) {
+            mesg += title;
+        }
+
         Exception(const char *title, pj_status_t status) : std::runtime_error(title) {
             char errorMsgBuffer[500];
             pj_strerror(status, errorMsgBuffer, sizeof(errorMsgBuffer));
@@ -56,6 +60,8 @@ namespace sip {
         ~PjsuaCommunicator();
 
         virtual void sendPcmSamples(int16_t *samples, unsigned int length);
+
+        std::function<void(std::string)> onStateChange;
 
     private:
         log4cpp::Category &logger;
