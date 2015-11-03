@@ -1,7 +1,6 @@
-#ifndef MUMSI_PJSUACOMMUNICATOR_HPP
-#define MUMSI_PJSUACOMMUNICATOR_HPP
+#pragma once
 
-#include "ISamplesBuffer.hpp"
+#include "ICommunicator.hpp"
 
 #include <pjmedia.h>
 
@@ -44,7 +43,7 @@ namespace sip {
 
     pj_status_t MediaPort_putFrameRawCallback(pjmedia_port *port, pjmedia_frame *frame);
 
-    class PjsuaCommunicator : public ISamplesBuffer {
+    class PjsuaCommunicator : public ICommunicator {
     public:
         PjsuaCommunicator();
 
@@ -56,11 +55,7 @@ namespace sip {
 
         ~PjsuaCommunicator();
 
-        virtual void pushSamples(int16_t *samples, unsigned int length);
-
-        std::function<void(int16_t *, int)> onIncomingSamples;
-
-//        virtual unsigned int pullSamples(int16_t *samples, unsigned int length, bool waitWhenEmpty);
+        virtual void sendPcmSamples(int16_t *samples, unsigned int length);
 
     private:
         log4cpp::Category &logger;
@@ -70,13 +65,8 @@ namespace sip {
         pjmedia_port *mediaPort;
 
         pjmedia_circ_buf *inputBuff;
-        pjmedia_circ_buf *outputBuff;
 
         std::mutex inBuffAccessMutex;
-
-        std::mutex outBuffAccessMutex;
-        std::condition_variable outBuffCondVar;
-
 
         // todo make it completely stateless
         pjmedia_port *createMediaPort();
@@ -101,5 +91,3 @@ namespace sip {
     };
 
 }
-
-#endif //MUMSI_PJSUACOMMUNICATOR_HPP

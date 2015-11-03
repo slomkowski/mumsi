@@ -9,12 +9,9 @@ find_package(PkgConfig REQUIRED)
 
 pkg_check_modules(PJSIP "libpjproject")
 pkg_check_modules(LOG4CPP "log4cpp")
-pkg_check_modules(SNDFILE "sndfile")
-
 
 include_directories(${PJSIP_INCLUDE_DIRS})
 include_directories(${LOG4CPP_INCLUDE_DIRS})
-include_directories(${SNDFILE_INCLUDE_DIRS})
 include_directories(../mumlib/include)
 
 link_directories(../mumlib/build)
@@ -24,7 +21,7 @@ set(SOURCE_FILES
         PjsuaCommunicator.hpp
         MumbleCommunicator.cpp
         MumbleCommunicator.hpp
-        ISamplesBuffer.hpp
+        ICommunicator.hpp
         Configuration.cpp
         Configuration.hpp)
 
@@ -33,10 +30,8 @@ set(SOURCE_FILES
 #)
 
 add_executable(mumsi ${SOURCE_FILES} main.cpp)
-target_link_libraries(mumsi ${OPUS_LIBRARIES})
 target_link_libraries(mumsi ${PJSIP_LIBRARIES})
 target_link_libraries(mumsi ${LOG4CPP_LIBRARIES})
-target_link_libraries(mumsi ${SNDFILE_LIBRARIES})
 target_link_libraries(mumsi ${Boost_LIBRARIES})
 target_link_libraries(mumsi mumlib)
 

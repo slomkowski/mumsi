@@ -12,22 +12,21 @@ namespace mumble {
         virtual void audio(
                 int16_t *pcm_data,
                 uint32_t pcm_data_size) {
-            communicator->samplesBuffer.pushSamples(pcm_data, pcm_data_size);
+            communicator->onIncomingPcmSamples(pcm_data, pcm_data_size);
         }
     };
 }
 
-mumble::MumbleCommunicator::MumbleCommunicator(
-        boost::asio::io_service &ioService,
-        ISamplesBuffer &samplesBuffer,
+mumble::MumbleCommunicator::MumbleCommunicator(boost::asio::io_service &ioService)
+        : ioService(ioService),
+          logger(log4cpp::Category::getInstance("MumbleCommunicator")) {
+}
+
+void mumble::MumbleCommunicator::connect(
         std::string user,
         std::string password,
         std::string host,
-        int port) : ioService(ioService),
-                    samplesBuffer(samplesBuffer),
-                    logger(log4cpp::Category::getInstance("MumbleCommunicator")) {
-
-    quit = false;
+        int port) {
 
     callback.reset(new MumlibCallback());
 
@@ -38,7 +37,7 @@ mumble::MumbleCommunicator::MumbleCommunicator(
     mum->connect(host, port, user, password);
 }
 
-void mumble::MumbleCommunicator::sendAudioFrame(int16_t *samples, int length) {
+void mumble::MumbleCommunicator::sendPcmSamples(int16_t *samples, unsigned int length) {
     mum->sendAudioData(samples, length);
 }
 

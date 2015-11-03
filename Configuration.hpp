@@ -1,5 +1,4 @@
-#ifndef CONFIGURATION_HPP_
-#define CONFIGURATION_HPP_
+#pragma once
 
 #include <string>
 #include <stdexcept>
@@ -35,5 +34,3 @@ namespace config {
         ConfigurationImpl *impl;
     };
 }
-
-#endif /* CONFIGURATION_HPP_ */

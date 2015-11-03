@@ -1,14 +1,12 @@
-#ifndef MUMSI_MUMBLECOMMUNICATOR_HPP
-#define MUMSI_MUMBLECOMMUNICATOR_HPP
+#pragma once
 
-#include "ISamplesBuffer.hpp"
+#include "ICommunicator.hpp"
+
 #include <mumlib.hpp>
 
 #include <string>
 #include <stdexcept>
 #include <log4cpp/Category.hh>
-#include <sndfile.hh>
-#include <thread>
 
 namespace mumble {
 
@@ -19,11 +17,12 @@ namespace mumble {
 
     class MumlibCallback;
 
-    class MumbleCommunicator {
+    class MumbleCommunicator : public ICommunicator {
     public:
         MumbleCommunicator(
-                boost::asio::io_service &ioService,
-                ISamplesBuffer &samplesBuffer,
+                boost::asio::io_service &ioService);
+
+        void connect(
                 std::string user,
                 std::string password,
                 std::string host,
@@ -31,31 +30,17 @@ namespace mumble {
 
         ~MumbleCommunicator();
 
-//        void senderThreadFunction();
-
-        //void receiveAudioFrameCallback(uint8_t *audio_data, uint32_t audio_data_size);
-
-        void sendAudioFrame(int16_t *samples, int length);
+        virtual void sendPcmSamples(int16_t *samples, unsigned int length);
 
     public:
         boost::asio::io_service &ioService;
 
         log4cpp::Category &logger;
 
-        ISamplesBuffer &samplesBuffer;
-
         std::shared_ptr<mumlib::Mumlib> mum;
 
-        std::unique_ptr<std::thread> senderThread;
-
-        SndfileHandle fileHandle;
-
         std::unique_ptr<MumlibCallback> callback;
-
-        bool quit;
 
         friend class MumlibCallback;
     };
 }
-
-#endif //MUMSI_MUMBLECOMMUNICATOR_HPP

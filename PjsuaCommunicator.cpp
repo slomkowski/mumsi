@@ -3,21 +3,16 @@
 
 #include <pjlib.h>
 #include <pjsua-lib/pjsua.h>
-
-#include <functional>
-
-#include <cstring>
-
-//todo wywalić
-#define THIS_FILE "mumsi"
+#include <boost/algorithm/string/replace.hpp>
 
 using namespace std;
-
 
 /**
  * This is global, because there's no way to pass it's value to onCallMediaState callback.
  */
 static int mediaPortSlot;
+
+static log4cpp::Category &pjLogger = log4cpp::Category::getInstance("PjSip");
 
 
 static void onCallMediaState(pjsua_call_id call_id) {
@@ -41,9 +36,7 @@ static void onIncomingCall(pjsua_acc_id acc_id,
 
     pjsua_call_get_info(call_id, &ci);
 
-    PJ_LOG(3, (THIS_FILE, "Incoming call from %.*s!!",
-            (int) ci.remote_info.slen,
-            ci.remote_info.ptr));
+    pjLogger.notice("Incoming call from %s.", ci.remote_info.ptr);
 
     /* Automatically answer incoming calls with 200/OK */
     pjsua_call_answer(call_id, 200, NULL, NULL);
@@ -56,29 +49,38 @@ static void onCallState(pjsua_call_id call_id,
     PJ_UNUSED_ARG(e);
 
     pjsua_call_get_info(call_id, &ci);
-    PJ_LOG(3, (THIS_FILE, "Call %d state=%.*s", call_id,
-            (int) ci.state_text.slen,
-            ci.state_text.ptr));
+    pjLogger.notice("Call %d state=%s.", call_id, ci.state_text.ptr);
+}
+
+static void pjLogToLog4CppBridgeFunction(int level, const char *data, int len) {
+    using namespace log4cpp;
+    std::map<int, Priority::Value> prioritiesMap = {
+            {1, Priority::ERROR},
+            {2, Priority::WARN},
+            {3, Priority::NOTICE},
+            {4, Priority::INFO},
+            {5, Priority::DEBUG},
+            {6, Priority::DEBUG}
+    };
+
+    string message(data);
+
+    message = message.substr(0, message.size() - 1); // remove newline
+
+    pjLogger << prioritiesMap.at(level) << message;
 }
 
 sip::PjsuaCommunicator::PjsuaCommunicator()
         : logger(log4cpp::Category::getInstance("SipCommunicator")),
           callbackLogger(log4cpp::Category::getInstance("SipCommunicatorCallback")) {
-
-}
-
-void sip::PjsuaCommunicator::connect(
-        std::string host,
-        std::string user,
-        std::string password,
-        unsigned int port) {
-
     pj_status_t status;
 
     status = pjsua_create();
     if (status != PJ_SUCCESS) {
         throw sip::Exception("Error in pjsua_create()", status);
     }
+
+    pj_log_set_log_func(pjLogToLog4CppBridgeFunction);
 
     pjsua_config generalConfig;
     pjsua_config_default(&generalConfig);
@@ -90,11 +92,10 @@ void sip::PjsuaCommunicator::connect(
     generalConfig.cb.on_call_media_state = &onCallMediaState;
     generalConfig.cb.on_call_state = &onCallState;
 
-    //todo zrobić coś z logami
     pjsua_logging_config logConfig;
     pjsua_logging_config_default(&logConfig);
-
-    logConfig.console_level = 4;
+    logConfig.cb = pjLogToLog4CppBridgeFunction;
+    logConfig.console_level = 5;
 
     status = pjsua_init(&generalConfig, &logConfig, NULL);
     if (status != PJ_SUCCESS) {
@@ -103,7 +104,25 @@ void sip::PjsuaCommunicator::connect(
 
     pjsua_set_null_snd_dev();
 
-    /* Add UDP transport. */
+    pj_caching_pool cachingPool;
+    pj_caching_pool_init(&cachingPool, &pj_pool_factory_default_policy, 0);
+    pj_pool_t *pool = pj_pool_create(&cachingPool.factory, "wav", 32768, 8192, nullptr);
+
+    // todo calculate sizes
+    pjmedia_circ_buf_create(pool, 960 * 10, &inputBuff);
+
+    mediaPort = createMediaPort();
+
+    pjsua_conf_add_port(pool, mediaPort, &mediaPortSlot);
+}
+
+void sip::PjsuaCommunicator::connect(
+        std::string host,
+        std::string user,
+        std::string password,
+        unsigned int port) {
+    pj_status_t status;
+
     pjsua_transport_config transportConfig;
     pjsua_transport_config_default(&transportConfig);
 
@@ -113,18 +132,6 @@ void sip::PjsuaCommunicator::connect(
     if (status != PJ_SUCCESS) {
         throw sip::Exception("Error creating transport", status);
     }
-
-    pj_caching_pool cachingPool;
-    pj_caching_pool_init(&cachingPool, &pj_pool_factory_default_policy, 0);
-    pj_pool_t *pool = pj_pool_create(&cachingPool.factory, "wav", 32768, 8192, nullptr);
-
-    // create circular buffers
-    pjmedia_circ_buf_create(pool, 960 * 10, &inputBuff);
-    pjmedia_circ_buf_create(pool, 960 * 10, &outputBuff);
-
-    mediaPort = createMediaPort();
-
-    pjsua_conf_add_port(pool, mediaPort, &mediaPortSlot);
 
     /* Initialization is done, now start sip */
     status = pjsua_start();
@@ -210,16 +217,9 @@ pj_status_t sip::PjsuaCommunicator::mediaPortGetFrame(pjmedia_frame *frame) {
 }
 
 void sip::PjsuaCommunicator::mediaPortPutFrame(pj_int16_t *samples, pj_size_t count) {
-//    std::unique_lock<std::mutex> lock(outBuffAccessMutex);
-//
-//    callbackLogger.debug("Pushing %d samples to out-buff.", count);
-//    pjmedia_circ_buf_write(outputBuff, samples, count);
-//
-//    lock.unlock();
-//
-//    outBuffCondVar.notify_all();
     if (count > 0) {
-        onIncomingSamples(samples, count);
+        callbackLogger.debug("Calling onIncomingPcmSamples with %d samples.", count);
+        onIncomingPcmSamples(samples, count);
     }
 }
 
@@ -228,7 +228,18 @@ void sip::PjsuaCommunicator::registerAccount(string host, string user, string pa
     pjsua_acc_config accConfig;
     pjsua_acc_config_default(&accConfig);
 
-    accConfig.id = toPjString(string("sip:") + user + "@" + host);
+    string uri = string("sip:") + user + "@" + host;
+
+    pj_status_t status;
+
+    status = pjsua_verify_sip_url(uri.c_str());
+    if (status != PJ_SUCCESS) {
+        throw sip::Exception("failed to register account", status);
+    }
+
+    logger.info("Registering account for URI: %s.", uri.c_str());
+
+    accConfig.id = toPjString(uri);
     accConfig.reg_uri = toPjString(string("sip:") + host);
 
     accConfig.cred_count = 1;
@@ -240,32 +251,14 @@ void sip::PjsuaCommunicator::registerAccount(string host, string user, string pa
 
     pjsua_acc_id acc_id;
 
-    pj_status_t status = pjsua_acc_add(&accConfig, PJ_TRUE, &acc_id);
+    status = pjsua_acc_add(&accConfig, PJ_TRUE, &acc_id);
     if (status != PJ_SUCCESS) {
         throw sip::Exception("failed to register account", status);
     }
 }
 
-void sip::PjsuaCommunicator::pushSamples(int16_t *samples, unsigned int length) {
+void sip::PjsuaCommunicator::sendPcmSamples(int16_t *samples, unsigned int length) {
     std::unique_lock<std::mutex> lock(inBuffAccessMutex);
     callbackLogger.debug("Pushing %d samples to in-buff.", length);
     pjmedia_circ_buf_write(inputBuff, samples, length);
 }
-
-//unsigned int sip::PjsuaCommunicator::pullSamples(int16_t *samples, unsigned int length, bool waitWhenEmpty) {
-//    std::unique_lock<std::mutex> lock(outBuffAccessMutex);
-//
-//    unsigned int availableSamples;
-//
-//    while ((availableSamples = pjmedia_circ_buf_get_len(inputBuff)) < length) {
-//        callbackLogger.debug("Not enough samples in buffer: %d, requested %d. Waiting.", availableSamples, length);
-//        outBuffCondVar.wait(lock);
-//    }
-//
-//    const int samplesToRead = std::min(length, availableSamples);
-//
-//    callbackLogger.debug("Pulling %d samples from out-buff.", samplesToRead);
-//    pjmedia_circ_buf_read(inputBuff, samples, samplesToRead);
-//
-//    return samplesToRead;
-//}

@@ -26,26 +26,30 @@ int main(int argc, char *argv[]) {
 
     sip::PjsuaCommunicator pjsuaCommunicator;
 
-    mumble::MumbleCommunicator mumbleCommunicator(
-            ioService,
-            pjsuaCommunicator,
+    mumble::MumbleCommunicator mumbleCommunicator(ioService);
+
+    using namespace std::placeholders;
+    pjsuaCommunicator.onIncomingPcmSamples = std::bind(
+            &mumble::MumbleCommunicator::sendPcmSamples,
+            &mumbleCommunicator,
+            _1, _2);
+
+    mumbleCommunicator.onIncomingPcmSamples = std::bind(
+            &sip::PjsuaCommunicator::sendPcmSamples,
+            &pjsuaCommunicator,
+            _1, _2);
+
+    mumbleCommunicator.connect(
             conf.getString("mumble.user"),
             conf.getString("mumble.password"),
             conf.getString("mumble.host"),
             conf.getInt("mumble.port"));
-
-    using namespace std::placeholders;
-    pjsuaCommunicator.onIncomingSamples = std::bind(
-            &mumble::MumbleCommunicator::sendAudioFrame,
-            &mumbleCommunicator,
-            _1, _2);
 
     pjsuaCommunicator.connect(
             conf.getString("sip.host"),
             conf.getString("sip.user"),
             conf.getString("sip.password"),
             conf.getInt("sip.port"));
-
 
     logger.info("Application started.");
 
