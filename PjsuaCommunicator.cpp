@@ -1,6 +1,5 @@
 #include "PjsuaCommunicator.hpp"
 
-
 #include <pjlib.h>
 #include <pjsua-lib/pjsua.h>
 #include <boost/algorithm/string/replace.hpp>
@@ -85,7 +84,9 @@ sip::PjsuaCommunicator::PjsuaCommunicator()
     pjsua_config generalConfig;
     pjsua_config_default(&generalConfig);
 
-    generalConfig.user_agent = toPjString("Mumsi Mumble-SIP Bridge");
+    string userAgent = "Mumsi Mumble-SIP Bridge";
+
+    generalConfig.user_agent = toPjString(userAgent);
     generalConfig.max_calls = 1;
 
     generalConfig.cb.on_incoming_call = &onIncomingCall;
@@ -121,6 +122,7 @@ void sip::PjsuaCommunicator::connect(
         std::string user,
         std::string password,
         unsigned int port) {
+
     pj_status_t status;
 
     pjsua_transport_config transportConfig;
@@ -150,10 +152,11 @@ pjmedia_port *sip::PjsuaCommunicator::createMediaPort() {
 
     pjmedia_port *mp = new pjmedia_port();
 
-    pj_str_t name = toPjString("Pjsuamp");
+    string name = "PjsuaMP";
+    auto pjName = toPjString(name);
 
     pj_status_t status = pjmedia_port_info_init(&(mp->info),
-                                                &name,
+                                                &pjName,
                                                 PJMEDIA_SIG_CLASS_PORT_AUD('s', 'i'),
                                                 SAMPLING_RATE,
                                                 1,
@@ -229,25 +232,34 @@ void sip::PjsuaCommunicator::registerAccount(string host, string user, string pa
     pjsua_acc_config_default(&accConfig);
 
     string uri = string("sip:") + user + "@" + host;
+    string regUri = "sip:" + host;
+    string scheme = "digest";
 
     pj_status_t status;
 
     status = pjsua_verify_sip_url(uri.c_str());
     if (status != PJ_SUCCESS) {
-        throw sip::Exception("failed to register account", status);
+        throw sip::Exception("invalid URI format", status);
     }
 
     logger.info("Registering account for URI: %s.", uri.c_str());
 
     accConfig.id = toPjString(uri);
-    accConfig.reg_uri = toPjString(string("sip:") + host);
+    accConfig.reg_uri = toPjString(regUri);
 
     accConfig.cred_count = 1;
     accConfig.cred_info[0].realm = toPjString(host);
-    accConfig.cred_info[0].scheme = toPjString("digest");
+    accConfig.cred_info[0].scheme = toPjString(scheme);
     accConfig.cred_info[0].username = toPjString(user);
     accConfig.cred_info[0].data_type = PJSIP_CRED_DATA_PLAIN_PASSWD;
     accConfig.cred_info[0].data = toPjString(password);
+
+    logger.error("id:%s", accConfig.id.ptr);
+    logger.error("reg_uri:%s", accConfig.reg_uri.ptr);
+    logger.error("realm:%s", accConfig.cred_info[0].realm.ptr);
+    logger.error("scheme:%s", accConfig.cred_info[0].scheme.ptr);
+    logger.error("username:%s", accConfig.cred_info[0].username.ptr);
+    logger.error("data:%s", accConfig.cred_info[0].data.ptr);
 
     pjsua_acc_id acc_id;
 

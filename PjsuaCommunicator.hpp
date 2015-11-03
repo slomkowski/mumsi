@@ -35,7 +35,7 @@ namespace sip {
         std::string mesg;
     };
 
-    inline pj_str_t toPjString(std::string str) {
+    inline pj_str_t toPjString(std::string &str) {
         return pj_str(const_cast<char *>(str.c_str()));
     }
 
