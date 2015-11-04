@@ -1,7 +1,7 @@
+#include "MumbleCommunicator.hpp"
+
 #include <cstring>
 #include <functional>
-
-#include "MumbleCommunicator.hpp"
 
 namespace mumble {
     class MumlibCallback : public mumlib::BasicCallback {

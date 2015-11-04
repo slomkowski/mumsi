@@ -4,9 +4,11 @@
 
 #include <mumlib.hpp>
 
+#include <log4cpp/Category.hh>
+#include <boost/noncopyable.hpp>
+
 #include <string>
 #include <stdexcept>
-#include <log4cpp/Category.hh>
 
 namespace mumble {
 
@@ -17,7 +19,7 @@ namespace mumble {
 
     class MumlibCallback;
 
-    class MumbleCommunicator : public ICommunicator {
+    class MumbleCommunicator : public ICommunicator, boost::noncopyable {
     public:
         MumbleCommunicator(
                 boost::asio::io_service &ioService);

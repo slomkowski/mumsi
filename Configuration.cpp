@@ -1,8 +1,9 @@
-#include <fstream>
+#include "Configuration.hpp"
+
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/ini_parser.hpp>
 
-#include "Configuration.hpp"
+#include <fstream>
 
 using namespace config;
 

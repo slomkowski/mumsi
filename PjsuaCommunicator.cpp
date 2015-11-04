@@ -2,7 +2,8 @@
 
 #include <pjlib.h>
 #include <pjsua-lib/pjsua.h>
-#include <boost/algorithm/string/replace.hpp>
+
+#include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
 
 using namespace std;

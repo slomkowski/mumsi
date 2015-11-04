@@ -1,9 +1,10 @@
 #pragma once
 
+#include <boost/noncopyable.hpp>
+
+#include <vector>
 #include <string>
 #include <stdexcept>
-
-#include <boost/noncopyable.hpp>
 
 namespace config {
 

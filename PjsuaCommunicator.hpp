@@ -4,12 +4,12 @@
 
 #include <pjmedia.h>
 
+#include <log4cpp/Category.hh>
+#include <boost/noncopyable.hpp>
+
 #include <string>
 #include <stdexcept>
-#include <log4cpp/Category.hh>
-#include <sndfile.hh>
 #include <mutex>
-#include <condition_variable>
 
 namespace sip {
 
@@ -47,7 +47,7 @@ namespace sip {
 
     pj_status_t MediaPort_putFrameRawCallback(pjmedia_port *port, pjmedia_frame *frame);
 
-    class PjsuaCommunicator : public ICommunicator {
+    class PjsuaCommunicator : public ICommunicator, boost::noncopyable {
     public:
         PjsuaCommunicator();
 
