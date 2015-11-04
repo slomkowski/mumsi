@@ -10,6 +10,9 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(PJSIP "libpjproject")
 pkg_check_modules(LOG4CPP "log4cpp")
 
+add_definitions(${PJSIP_CFLAGS})
+add_definitions(${LOG4CPP_CFLAGS})
+
 include_directories(${PJSIP_INCLUDE_DIRS})
 include_directories(${LOG4CPP_INCLUDE_DIRS})
 include_directories(../mumlib/include)
