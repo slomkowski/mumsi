@@ -1,7 +1,7 @@
 #pragma once
 
 #include <functional>
-#include <inttypes.h>
+#include <stdint.h>
 
 class ICommunicator {
 public:

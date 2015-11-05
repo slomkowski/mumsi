@@ -1,11 +1,9 @@
-#include "log4cpp/Category.hh"
-#include "log4cpp/FileAppender.hh"
-#include "log4cpp/OstreamAppender.hh"
-
 #include "PjsuaCommunicator.hpp"
 #include "MumbleCommunicator.hpp"
-
 #include "Configuration.hpp"
+
+#include <log4cpp/FileAppender.hh>
+#include <log4cpp/OstreamAppender.hh>
 
 int main(int argc, char *argv[]) {
 

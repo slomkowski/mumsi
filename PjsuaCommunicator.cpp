@@ -11,18 +11,30 @@ using namespace std;
 /**
  * These are global, because there's no way to pass it's value to onCallMediaState callback.
  */
-static int mediaPortSlot;
+static int mediaPortSlot = -1;
 static sip::PjsuaCommunicator *pjsuaCommunicator = nullptr;
 
 static log4cpp::Category &pjLogger = log4cpp::Category::getInstance("PjSip");
 
 
-static void onCallMediaState(pjsua_call_id call_id) {
+void sip::PjsuaCommunicator_onCallMediaState(pjsua_call_id call_id) {
     pjsua_call_info ci;
 
     pjsua_call_get_info(call_id, &ci);
 
     if (ci.media_status == PJSUA_CALL_MEDIA_ACTIVE) {
+
+        if (mediaPortSlot == -1) {
+            pj_status_t status = pjsua_conf_add_port(
+                    pjsuaCommunicator->pool,
+                    pjsuaCommunicator->mediaPort,
+                    &mediaPortSlot);
+
+            if (status != PJ_SUCCESS) {
+                throw sip::Exception("error when calling pjsua_conf_add_port", status);
+            }
+        }
+
         pjsua_conf_connect(ci.conf_slot, mediaPortSlot);
         pjsua_conf_connect(mediaPortSlot, ci.conf_slot);
     }
@@ -63,7 +75,9 @@ static void onCallState(pjsua_call_id call_id,
     pjLogger.info("Call %d state=%s.", call_id, ci.state_text.ptr);
 
     string address = string(ci.remote_info.ptr);
-    address = address.substr(5, address.size() - 5 - 1);
+
+    boost::replace_all(address, "<", "");
+    boost::replace_all(address, ">", "");
 
     if (ci.state == PJSIP_INV_STATE_CONFIRMED) {
         auto msgText = "Start call from " + address + ".";
@@ -121,7 +135,7 @@ sip::PjsuaCommunicator::PjsuaCommunicator()
 
     generalConfig.cb.on_incoming_call = &onIncomingCall;
     generalConfig.cb.on_dtmf_digit = &onDtmfDigit;
-    generalConfig.cb.on_call_media_state = &onCallMediaState;
+    generalConfig.cb.on_call_media_state = &PjsuaCommunicator_onCallMediaState;
     generalConfig.cb.on_call_state = &onCallState;
 
     pjsua_logging_config logConfig;
@@ -129,23 +143,28 @@ sip::PjsuaCommunicator::PjsuaCommunicator()
     logConfig.cb = pjLogToLog4CppBridgeFunction;
     logConfig.console_level = 5;
 
-    status = pjsua_init(&generalConfig, &logConfig, NULL);
+    pjsua_media_config mediaConfig;
+    pjsua_media_config_default(&mediaConfig);
+    mediaConfig.max_media_ports = 3;
+
+    status = pjsua_init(&generalConfig, &logConfig, &mediaConfig);
     if (status != PJ_SUCCESS) {
-        throw sip::Exception("Error in pjsua_init()", status);
+        throw sip::Exception("error in pjsua_init", status);
     }
 
-    pjsua_set_null_snd_dev();
+    status = pjsua_set_null_snd_dev();
+    if (status != PJ_SUCCESS) {
+        throw sip::Exception("error setting null device", status);
+    }
 
     pj_caching_pool cachingPool;
     pj_caching_pool_init(&cachingPool, &pj_pool_factory_default_policy, 0);
-    pj_pool_t *pool = pj_pool_create(&cachingPool.factory, "wav", 32768, 8192, nullptr);
+    pool = pj_pool_create(&cachingPool.factory, "wav", 32768, 8192, nullptr);
 
     // todo calculate sizes
     pjmedia_circ_buf_create(pool, 960 * 10, &inputBuff);
 
     mediaPort = createMediaPort();
-
-    pjsua_conf_add_port(pool, mediaPort, &mediaPortSlot);
 }
 
 void sip::PjsuaCommunicator::connect(
@@ -166,7 +185,6 @@ void sip::PjsuaCommunicator::connect(
         throw sip::Exception("Error creating transport", status);
     }
 
-    /* Initialization is done, now start sip */
     status = pjsua_start();
     if (status != PJ_SUCCESS) {
         throw sip::Exception("Error starting sip", status);
@@ -177,6 +195,10 @@ void sip::PjsuaCommunicator::connect(
 
 sip::PjsuaCommunicator::~PjsuaCommunicator() {
     pjsua_destroy();
+
+    if (mediaPort != nullptr) {
+        delete mediaPort;
+    }
 }
 
 pjmedia_port *sip::PjsuaCommunicator::createMediaPort() {

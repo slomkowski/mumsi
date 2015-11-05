@@ -3,6 +3,9 @@
 #include "ICommunicator.hpp"
 
 #include <pjmedia.h>
+#include <pjsua-lib/pjsua.h>
+
+#undef isblank
 
 #include <log4cpp/Category.hh>
 #include <boost/noncopyable.hpp>
@@ -47,6 +50,8 @@ namespace sip {
 
     pj_status_t MediaPort_putFrameRawCallback(pjmedia_port *port, pjmedia_frame *frame);
 
+    void PjsuaCommunicator_onCallMediaState(pjsua_call_id call_id);
+
     class PjsuaCommunicator : public ICommunicator, boost::noncopyable {
     public:
         PjsuaCommunicator();
@@ -68,7 +73,9 @@ namespace sip {
         log4cpp::Category &callbackLogger;
 
 
-        pjmedia_port *mediaPort;
+        pjmedia_port *mediaPort = nullptr;
+
+        pj_pool_t *pool = nullptr;
 
         pjmedia_circ_buf *inputBuff;
 
@@ -94,6 +101,8 @@ namespace sip {
 
         friend pj_status_t MediaPort_putFrameRawCallback(pjmedia_port *port,
                                                          pjmedia_frame *frame);
+
+        friend void PjsuaCommunicator_onCallMediaState(pjsua_call_id call_id);
     };
 
 }
