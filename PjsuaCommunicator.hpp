@@ -13,6 +13,7 @@
 #include <string>
 #include <stdexcept>
 #include <mutex>
+#include <climits>
 
 namespace sip {
 
@@ -46,12 +47,6 @@ namespace sip {
         return pj_str(const_cast<char *>(str.c_str()));
     }
 
-    pj_status_t MediaPort_getFrameRawCallback(pjmedia_port *port, pjmedia_frame *frame);
-
-    pj_status_t MediaPort_putFrameRawCallback(pjmedia_port *port, pjmedia_frame *frame);
-
-    void PjsuaCommunicator_onCallMediaState(pjsua_call_id call_id);
-
     class PjsuaCommunicator : public ICommunicator, boost::noncopyable {
     public:
         PjsuaCommunicator();
@@ -68,12 +63,27 @@ namespace sip {
 
         std::function<void(std::string)> onStateChange;
 
+        void onCallMediaState(pjsua_call_id call_id);
+
+        void onIncomingCall(pjsua_acc_id acc_id, pjsua_call_id call_id, pjsip_rx_data *rdata);
+
+        void onDtmfDigit(pjsua_call_id callId, int digit);
+
+        void onCallState(pjsua_call_id call_id, pjsip_event *e);
+
+        pj_status_t mediaPortGetFrame(pjmedia_port *port, pjmedia_frame *frame);
+
+        pj_status_t mediaPortPutFrame(pjmedia_port *port, pjmedia_frame *frame);
+
+        pj_status_t _mediaPortOnDestroy(pjmedia_port *port);
+
     private:
         log4cpp::Category &logger;
         log4cpp::Category &callbackLogger;
 
-
-        pjmedia_port *mediaPort = nullptr;
+        pjmedia_port mediaPort;
+        int mediaPortSlot = INT_MIN;
+        bool eof = false;
 
         pj_pool_t *pool = nullptr;
 
@@ -81,28 +91,14 @@ namespace sip {
 
         std::mutex inBuffAccessMutex;
 
-        // todo make it completely stateless
-        pjmedia_port *createMediaPort();
+        bool available = true;
+
+        void createMediaPort();
 
         void registerAccount(std::string host,
                              std::string user,
                              std::string password);
 
-        pj_status_t mediaPortGetFrame(pjmedia_frame *frame);
-
-        void mediaPortPutFrame(pj_int16_t *samples, pj_size_t count);
-
-        /**
-        * For PJMEDIA implementation reasons, these callbacks have to be functions, not methods.
-        * That is the reason to use 'friend'.
-        */
-        friend pj_status_t MediaPort_getFrameRawCallback(pjmedia_port *port,
-                                                         pjmedia_frame *frame);
-
-        friend pj_status_t MediaPort_putFrameRawCallback(pjmedia_port *port,
-                                                         pjmedia_frame *frame);
-
-        friend void PjsuaCommunicator_onCallMediaState(pjsua_call_id call_id);
     };
 
 }
