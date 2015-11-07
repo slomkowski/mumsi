@@ -5,6 +5,8 @@
 #include <pjmedia.h>
 #include <pjsua-lib/pjsua.h>
 
+#include <pjsua2.hpp>
+
 #undef isblank
 
 #include <log4cpp/Category.hh>
@@ -14,6 +16,7 @@
 #include <stdexcept>
 #include <mutex>
 #include <climits>
+#include <bits/unique_ptr.h>
 
 namespace sip {
 
@@ -43,9 +46,13 @@ namespace sip {
         std::string mesg;
     };
 
-    inline pj_str_t toPjString(std::string &str) {
-        return pj_str(const_cast<char *>(str.c_str()));
-    }
+    class _LogWriter;
+
+    class _Account;
+
+    class _Call;
+
+    class _MumlibAudioMedia;
 
     class PjsuaCommunicator : public ICommunicator, boost::noncopyable {
     public:
@@ -63,27 +70,19 @@ namespace sip {
 
         std::function<void(std::string)> onStateChange;
 
-        void onCallMediaState(pjsua_call_id call_id);
-
-        void onIncomingCall(pjsua_acc_id acc_id, pjsua_call_id call_id, pjsip_rx_data *rdata);
-
-        void onDtmfDigit(pjsua_call_id callId, int digit);
-
-        void onCallState(pjsua_call_id call_id, pjsip_event *e);
-
         pj_status_t mediaPortGetFrame(pjmedia_port *port, pjmedia_frame *frame);
 
         pj_status_t mediaPortPutFrame(pjmedia_port *port, pjmedia_frame *frame);
 
-        pj_status_t _mediaPortOnDestroy(pjmedia_port *port);
-
     private:
         log4cpp::Category &logger;
-        log4cpp::Category &callbackLogger;
+        log4cpp::Category &pjsuaLogger;
 
-        pjmedia_port mediaPort;
-        int mediaPortSlot = INT_MIN;
-        bool eof = false;
+        std::unique_ptr<_LogWriter> logWriter;
+        std::unique_ptr<_Account> account;
+        std::unique_ptr<_MumlibAudioMedia> media;
+
+        pj::Endpoint endpoint;
 
         pj_pool_t *pool = nullptr;
 
@@ -91,14 +90,15 @@ namespace sip {
 
         std::mutex inBuffAccessMutex;
 
-        bool available = true;
-
-        void createMediaPort();
-
         void registerAccount(std::string host,
                              std::string user,
                              std::string password);
 
+        friend class _Call;
+
+        friend class _Account;
+
+        friend class _MumlibAudioMedia;
     };
 
 }

@@ -8,176 +8,195 @@
 
 using namespace std;
 
-/**
- * These are global, because there's no way to pass it's value to onCallMediaState callback.
- */
-//static int mediaPortSlot = -1;
-//static sip::PjsuaCommunicator *pjsuaCommunicator = nullptr;
-
-static log4cpp::Category &pjLogger = log4cpp::Category::getInstance("PjSip");
-
-
-void sip::PjsuaCommunicator::onCallMediaState(pjsua_call_id call_id) {
-    pjsua_call_info ci;
-
-    pjsua_call_get_info(call_id, &ci);
-
-    if (ci.media_status == PJSUA_CALL_MEDIA_ACTIVE) {
-        pjsua_conf_connect(ci.conf_slot, mediaPortSlot);
-        pjsua_conf_connect(mediaPortSlot, ci.conf_slot);
-    }
-}
-
-void sip::PjsuaCommunicator::onIncomingCall(pjsua_acc_id acc_id, pjsua_call_id call_id, pjsip_rx_data *rdata) {
-    pjsua_call_info ci;
-
-    PJ_UNUSED_ARG(rdata);
-
-    pjsua_call_get_info(call_id, &ci);
-    pjsua_call_set_user_data(call_id, this);
-
-    logger.info("Incoming call from %s.", ci.remote_info.ptr);
-
-    if (this->available) {
-        available = false;
-
-        pjsua_call_set_user_data(call_id, this);
-        pjsua_call_answer(call_id, 200, nullptr, nullptr);
-    } else {
-        // 486 Busy Here - Callee is Busy
-        pjsua_call_answer(call_id, 486, nullptr, nullptr);
-    }
-}
-
-void sip::PjsuaCommunicator::onDtmfDigit(pjsua_call_id callId, int digit) {
-    logger.notice("DTMF digit '%c' (call %d).", digit, callId);
-}
-
-void sip::PjsuaCommunicator::onCallState(pjsua_call_id call_id, pjsip_event *e) {
-    pjsua_call_info ci;
-
-    PJ_UNUSED_ARG(e);
-
-    pjsua_call_get_info(call_id, &ci);
-
-    logger.info("Call %d state=%s.", call_id, ci.state_text.ptr);
-
-    string address = string(ci.remote_info.ptr);
-
-    boost::replace_all(address, "<", "");
-    boost::replace_all(address, ">", "");
-
-    if (ci.state == PJSIP_INV_STATE_CONFIRMED) {
-        auto msgText = "Start call from " + address + ".";
-
-        logger.notice(msgText);
-        onStateChange(msgText);
-    } else if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
-        auto msgText = "End call from " + address + ".";
-
-        logger.notice(msgText);
-        onStateChange(msgText);
-
-        available = true;
-    }
-}
-
-static void callback_onCallMediaState(pjsua_call_id callId) {
-    auto *communicator = static_cast<sip::PjsuaCommunicator *>(pjsua_call_get_user_data(callId));
-    communicator->onCallMediaState(callId);
-}
-
-static void callback_onIncomingCall(pjsua_acc_id acc_id, pjsua_call_id call_id, pjsip_rx_data *rdata) {
-    auto *communicator = static_cast<sip::PjsuaCommunicator *>(pjsua_acc_get_user_data(acc_id));
-    communicator->onIncomingCall(acc_id, call_id, rdata);
-}
-
-static void callback_onDtmfDigit(pjsua_call_id callId, int digit) {
-    auto *communicator = static_cast<sip::PjsuaCommunicator *>(pjsua_call_get_user_data(callId));
-    communicator->onDtmfDigit(callId, digit);
-}
-
-static void callback_onCallState(pjsua_call_id call_id, pjsip_event *e) {
-    auto *communicator = static_cast<sip::PjsuaCommunicator *>(pjsua_call_get_user_data(call_id));
-    communicator->onCallState(call_id, e);
-}
-
-static pj_status_t callback_getFrame(pjmedia_port *port, pjmedia_frame *frame) {
-    auto *communicator = static_cast<sip::PjsuaCommunicator *>(port->port_data.pdata);
-    return communicator->mediaPortGetFrame(port, frame);
-}
-
-static pj_status_t callback_putFrame(pjmedia_port *port, pjmedia_frame *frame) {
-    auto *communicator = static_cast<sip::PjsuaCommunicator *>(port->port_data.pdata);
-    return communicator->mediaPortPutFrame(port, frame);
-}
-
-static pj_status_t callback_onDestroy(pjmedia_port *port) {
-    auto *communicator = static_cast<sip::PjsuaCommunicator *>(port->port_data.pdata);
-    return communicator->_mediaPortOnDestroy(port);
-}
-
-static void pjLogToLog4CppBridgeFunction(int level, const char *data, int len) {
+namespace sip {
     using namespace log4cpp;
-    std::map<int, Priority::Value> prioritiesMap = {
-            {1, Priority::ERROR},
-            {2, Priority::WARN},
-            {3, Priority::NOTICE},
-            {4, Priority::INFO},
-            {5, Priority::DEBUG},
-            {6, Priority::DEBUG}
+
+    class _LogWriter : public pj::LogWriter {
+    public:
+        _LogWriter(Category &logger)
+                : logger(logger) { }
+
+        virtual void write(const pj::LogEntry &entry) {
+
+            auto message = entry.msg.substr(0, entry.msg.size() - 1); // remove newline
+
+            logger << prioritiesMap.at(entry.level) << message;
+        }
+
+    private:
+        log4cpp::Category &logger;
+
+        std::map<int, Priority::Value> prioritiesMap = {
+                {1, Priority::ERROR},
+                {2, Priority::WARN},
+                {3, Priority::NOTICE},
+                {4, Priority::INFO},
+                {5, Priority::DEBUG},
+                {6, Priority::DEBUG}
+        };
     };
 
-    string message(data);
+    class _MumlibAudioMedia : public pj::AudioMedia {
+    public:
+        _MumlibAudioMedia(sip::PjsuaCommunicator &comm)
+                : communicator(comm) {
+            createMediaPort();
+            registerMediaPort(&mediaPort);
+        }
 
-    message = message.substr(0, message.size() - 1); // remove newline
+        ~_MumlibAudioMedia() {
+            unregisterMediaPort();
+        }
 
-    pjLogger << prioritiesMap.at(level) << message;
+    private:
+        pjmedia_port mediaPort;
+        sip::PjsuaCommunicator &communicator;
+
+        static pj_status_t callback_getFrame(pjmedia_port *port, pjmedia_frame *frame) {
+            auto *communicator = static_cast<sip::PjsuaCommunicator *>(port->port_data.pdata);
+            return communicator->mediaPortGetFrame(port, frame);
+        }
+
+        static pj_status_t callback_putFrame(pjmedia_port *port, pjmedia_frame *frame) {
+            auto *communicator = static_cast<sip::PjsuaCommunicator *>(port->port_data.pdata);
+            return communicator->mediaPortPutFrame(port, frame);
+        }
+
+        void createMediaPort() {
+
+            auto name = pj_str((char *) "MumsiMediaPort");
+
+            pj_status_t status = pjmedia_port_info_init(&(mediaPort.info),
+                                                        &name,
+                                                        PJMEDIA_SIG_CLASS_PORT_AUD('s', 'i'),
+                                                        SAMPLING_RATE,
+                                                        1,
+                                                        16,
+                                                        SAMPLING_RATE * 20 /
+                                                        1000); // todo recalculate to match mumble specs
+
+            if (status != PJ_SUCCESS) {
+                throw sip::Exception("error while calling pjmedia_port_info_init()", status);
+            }
+
+            mediaPort.port_data.pdata = &communicator;
+
+            mediaPort.get_frame = &callback_getFrame;
+            mediaPort.put_frame = &callback_putFrame;
+        }
+    };
+
+    class _Call : public pj::Call {
+    public:
+        _Call(sip::PjsuaCommunicator &comm, pj::Account &acc, int call_id = PJSUA_INVALID_ID)
+                : pj::Call(acc, call_id),
+                  communicator(comm),
+                  account(acc) { }
+
+        virtual void onCallState(pj::OnCallStateParam &prm) {
+            auto ci = getInfo();
+
+            communicator.logger.info("Call %d state=%s.", ci.id, ci.stateText.c_str());
+
+            string address = ci.remoteUri;
+
+            boost::replace_all(address, "<", "");
+            boost::replace_all(address, ">", "");
+
+            if (ci.state == PJSIP_INV_STATE_CONFIRMED) {
+                auto msgText = "Incoming call from " + address + ".";
+
+                communicator.logger.notice(msgText);
+                communicator.onStateChange(msgText);
+            } else if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
+                auto msgText = "Call from " + address + " finished.";
+
+                communicator.logger.notice(msgText);
+                communicator.onStateChange(msgText);
+
+                delete this;
+            }
+        }
+
+        virtual void onCallMediaState(pj::OnCallMediaStateParam &prm) {
+            auto ci = getInfo();
+
+            if (ci.media.size() != 1) {
+                throw sip::Exception("ci.media.size is not 1");
+            }
+
+            if (ci.media[0].status == PJSUA_CALL_MEDIA_ACTIVE) {
+                auto *aud_med = static_cast<pj::AudioMedia *>(getMedia(0));
+
+                communicator.media->startTransmit(*aud_med);
+                aud_med->startTransmit(*communicator.media);
+            }
+        }
+
+        virtual void onDtmfDigit(pj::OnDtmfDigitParam &prm) {
+            communicator.logger.notice("DTMF digit '%s' (call %d).", prm.digit.c_str(), getId());
+        }
+
+    private:
+        sip::PjsuaCommunicator &communicator;
+        pj::Account &account;
+    };
+
+    class _Account : public pj::Account {
+    public:
+        _Account(sip::PjsuaCommunicator &comm)
+                : communicator(comm) { }
+
+        virtual void onRegState(pj::OnRegStateParam &prm) {
+            pj::AccountInfo ai = getInfo();
+            communicator.logger << log4cpp::Priority::INFO
+            << (ai.regIsActive ? "Register:" : "Unregister:") << " code=" << prm.code;
+        }
+
+        virtual void onIncomingCall(pj::OnIncomingCallParam &iprm) {
+            auto *call = new _Call(communicator, *this, iprm.callId);
+
+            communicator.logger.info("Incoming call from %s.", call->getInfo().remoteUri.c_str());
+
+            pj::CallOpParam param;
+            param.statusCode = PJSIP_SC_OK;
+
+            call->answer(param);
+        }
+
+    private:
+        sip::PjsuaCommunicator &communicator;
+
+        friend class _Call;
+    };
 }
 
 sip::PjsuaCommunicator::PjsuaCommunicator()
         : logger(log4cpp::Category::getInstance("SipCommunicator")),
-          callbackLogger(log4cpp::Category::getInstance("SipCommunicatorCallback")) {
+          pjsuaLogger(log4cpp::Category::getInstance("Pjsua")) {
+
+    logWriter.reset(new sip::_LogWriter(pjsuaLogger));
+
+    endpoint.libCreate();
+
+    pj::EpConfig endpointConfig;
+    endpointConfig.uaConfig.userAgent = "Mumsi Mumble-SIP gateway";
+    endpointConfig.uaConfig.maxCalls = 1;
+
+    endpointConfig.logConfig.writer = logWriter.get();
+    endpointConfig.logConfig.level = 5;
+
+    endpointConfig.medConfig.noVad = true;
+
+    endpoint.libInit(endpointConfig);
+
     pj_status_t status;
-
-
-    status = pjsua_create();
-    if (status != PJ_SUCCESS) {
-        throw sip::Exception("Error in pjsua_create()", status);
-    }
-
-    pj_log_set_log_func(pjLogToLog4CppBridgeFunction);
-
-    pjsua_config generalConfig;
-    pjsua_config_default(&generalConfig);
-
-    string userAgent = "Mumsi Mumble-SIP Bridge";
-
-    generalConfig.user_agent = toPjString(userAgent);
-    generalConfig.max_calls = 1;
-
-    generalConfig.cb.on_incoming_call = &callback_onIncomingCall;
-    generalConfig.cb.on_dtmf_digit = &callback_onDtmfDigit;
-    generalConfig.cb.on_call_media_state = &callback_onCallMediaState;
-    generalConfig.cb.on_call_state = &callback_onCallState;
-
-    pjsua_logging_config logConfig;
-    pjsua_logging_config_default(&logConfig);
-    logConfig.cb = pjLogToLog4CppBridgeFunction;
-    logConfig.console_level = 5;
-
-    pjsua_media_config mediaConfig;
-    pjsua_media_config_default(&mediaConfig);
-    mediaConfig.no_vad = 1;
-
-    status = pjsua_init(&generalConfig, &logConfig, &mediaConfig);
-    if (status != PJ_SUCCESS) {
-        throw sip::Exception("error in pjsua_init", status);
-    }
-
     pj_caching_pool cachingPool;
     pj_caching_pool_init(&cachingPool, &pj_pool_factory_default_policy, 0);
-    pool = pj_pool_create(&cachingPool.factory, "wav", 32768, 8192, nullptr);
+    pool = pj_pool_create(&cachingPool.factory, "media", 32768, 8192, nullptr);
+    if (!pool) {
+        throw sip::Exception("error when creating memory pool", status);
+    }
 
     // todo calculate sizes
     status = pjmedia_circ_buf_create(pool, 960 * 10, &inputBuff);
@@ -185,14 +204,7 @@ sip::PjsuaCommunicator::PjsuaCommunicator()
         throw sip::Exception("error when creating circular buffer", status);
     }
 
-    logger.notice("Active ports: %d.", pjsua_conf_get_active_ports());
-
-    createMediaPort();
-
-    status = pjsua_conf_add_port(pool, &mediaPort, &mediaPortSlot);
-    if (status != PJ_SUCCESS) {
-        throw sip::Exception("error when calling pjsua_conf_add_port", status);
-    }
+    media.reset(new _MumlibAudioMedia(*this));
 }
 
 void sip::PjsuaCommunicator::connect(
@@ -201,24 +213,15 @@ void sip::PjsuaCommunicator::connect(
         std::string password,
         unsigned int port) {
 
-    pj_status_t status;
-
-    pjsua_transport_config transportConfig;
-    pjsua_transport_config_default(&transportConfig);
+    pj::TransportConfig transportConfig;
 
     transportConfig.port = port;
 
-    status = pjsua_transport_create(PJSIP_TRANSPORT_UDP, &transportConfig, NULL);
-    if (status != PJ_SUCCESS) {
-        throw sip::Exception("error creating transport", status);
-    }
+    endpoint.transportCreate(PJSIP_TRANSPORT_UDP, transportConfig); // todo try catch
 
-    status = pjsua_start();
-    if (status != PJ_SUCCESS) {
-        throw sip::Exception("error starting PJSUA", status);
-    }
+    endpoint.libStart();
 
-    status = pjsua_set_null_snd_dev();
+    pj_status_t status = pjsua_set_null_snd_dev();
     if (status != PJ_SUCCESS) {
         throw sip::Exception("error in pjsua_set_null_std_dev()", status);
     }
@@ -227,42 +230,12 @@ void sip::PjsuaCommunicator::connect(
 }
 
 sip::PjsuaCommunicator::~PjsuaCommunicator() {
-    pjsua_destroy();
+    endpoint.libDestroy();
 }
 
-void sip::PjsuaCommunicator::createMediaPort() {
-
-    eof = false;
-
-    string name = "PjsuamediaPort";
-    auto pjName = toPjString(name);
-
-    pj_status_t status = pjmedia_port_info_init(&(mediaPort.info),
-                                                &pjName,
-                                                PJMEDIA_SIG_CLASS_PORT_AUD('s', 'i'),
-                                                SAMPLING_RATE,
-                                                1,
-                                                16,
-                                                SAMPLING_RATE * 20 /
-                                                1000); // todo recalculate to match mumble specs
-
-    if (status != PJ_SUCCESS) {
-        throw sip::Exception("error while calling pjmedia_port_info_init().", status);
-    }
-
-    mediaPort.port_data.pdata = this;
-
-    mediaPort.get_frame = &callback_getFrame;
-    mediaPort.put_frame = &callback_putFrame;
-    mediaPort.on_destroy = &callback_onDestroy;
-}
 
 pj_status_t sip::PjsuaCommunicator::mediaPortGetFrame(pjmedia_port *port, pjmedia_frame *frame) {
     std::unique_lock<std::mutex> lock(inBuffAccessMutex);
-
-    if (this->eof) {
-        return PJ_EEOF;
-    }
 
     frame->type = PJMEDIA_FRAME_TYPE_AUDIO;
     pj_int16_t *samples = static_cast<pj_int16_t *>(frame->buf);
@@ -271,12 +244,12 @@ pj_status_t sip::PjsuaCommunicator::mediaPortGetFrame(pjmedia_port *port, pjmedi
     pj_size_t availableSamples = pjmedia_circ_buf_get_len(inputBuff);
     const int samplesToRead = std::min(count, availableSamples);
 
-    callbackLogger.debug("Pulling %d samples from in-buff.", samplesToRead);
+    pjsuaLogger.debug("Pulling %d samples from in-buff.", samplesToRead);
     pjmedia_circ_buf_read(inputBuff, samples, samplesToRead);
 
     if (availableSamples < count) {
-        callbackLogger.debug("Requested %d samples, available %d, filling remaining with zeros.", count,
-                             availableSamples);
+        pjsuaLogger.debug("Requested %d samples, available %d, filling remaining with zeros.", count,
+                          availableSamples);
 
         for (int i = samplesToRead; i < count; ++i) {
             samples[i] = 0;
@@ -287,67 +260,36 @@ pj_status_t sip::PjsuaCommunicator::mediaPortGetFrame(pjmedia_port *port, pjmedi
 }
 
 pj_status_t sip::PjsuaCommunicator::mediaPortPutFrame(pjmedia_port *port, pjmedia_frame *frame) {
-    if (this->eof) {
-        return PJ_EEOF;
-    }
-
     pj_int16_t *samples = static_cast<pj_int16_t *>(frame->buf);
     pj_size_t count = frame->size / 2 / PJMEDIA_PIA_CCNT(&port->info);
     frame->type = PJMEDIA_FRAME_TYPE_AUDIO;
 
     if (count > 0) {
-        callbackLogger.debug("Calling onIncomingPcmSamples with %d samples.", count);
+        pjsuaLogger.debug("Calling onIncomingPcmSamples with %d samples.", count);
         onIncomingPcmSamples(samples, count);
     }
 
     return PJ_SUCCESS;
 }
 
-pj_status_t sip::PjsuaCommunicator::_mediaPortOnDestroy(pjmedia_port *port) {
-    eof = true;
-    return PJ_SUCCESS;
-}
-
 void sip::PjsuaCommunicator::registerAccount(string host, string user, string password) {
 
-    pjsua_acc_config accConfig;
-    pjsua_acc_config_default(&accConfig);
+    string uri = "sip:" + user + "@" + host;
+    pj::AccountConfig accountConfig;
+    accountConfig.idUri = uri;
+    accountConfig.regConfig.registrarUri = "sip:" + host;
 
-    string uri = string("sip:") + user + "@" + host;
-    string regUri = "sip:" + host;
-    string scheme = "digest";
-
-    pj_status_t status;
-
-    status = pjsua_verify_sip_url(uri.c_str());
-    if (status != PJ_SUCCESS) {
-        throw sip::Exception("invalid URI format", status);
-    }
+    pj::AuthCredInfo cred("digest", "*", user, 0, password);
+    accountConfig.sipConfig.authCreds.push_back(cred);
 
     logger.info("Registering account for URI: %s.", uri.c_str());
-
-    accConfig.id = toPjString(uri);
-    accConfig.reg_uri = toPjString(regUri);
-
-    accConfig.cred_count = 1;
-    accConfig.cred_info[0].realm = toPjString(host);
-    accConfig.cred_info[0].scheme = toPjString(scheme);
-    accConfig.cred_info[0].username = toPjString(user);
-    accConfig.cred_info[0].data_type = PJSIP_CRED_DATA_PLAIN_PASSWD;
-    accConfig.cred_info[0].data = toPjString(password);
-    accConfig.user_data = this;
-
-    pjsua_acc_id acc_id;
-
-    status = pjsua_acc_add(&accConfig, PJ_TRUE, &acc_id);
-    if (status != PJ_SUCCESS) {
-        throw sip::Exception("failed to register account", status);
-    }
+    account.reset(new _Account(*this));
+    account->create(accountConfig);
 }
 
 void sip::PjsuaCommunicator::sendPcmSamples(int16_t *samples, unsigned int length) {
     std::unique_lock<std::mutex> lock(inBuffAccessMutex);
-    callbackLogger.debug("Pushing %d samples to in-buff.", length);
+    pjsuaLogger.debug("Pushing %d samples to in-buff.", length);
     pjmedia_circ_buf_write(inputBuff, samples, length);
 }
 
