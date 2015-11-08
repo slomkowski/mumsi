@@ -26,7 +26,9 @@ set(SOURCE_FILES
         MumbleCommunicator.hpp
         ICommunicator.hpp
         Configuration.cpp
-        Configuration.hpp)
+        Configuration.hpp
+        IncomingConnectionValidator.cpp
+        IncomingConnectionValidator.hpp)
 
 add_executable(mumsi ${SOURCE_FILES} main.cpp)
 target_link_libraries(mumsi ${PJSIP_LIBRARIES})

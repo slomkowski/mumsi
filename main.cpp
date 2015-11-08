@@ -1,14 +1,18 @@
 #include "PjsuaCommunicator.hpp"
 #include "MumbleCommunicator.hpp"
+#include "IncomingConnectionValidator.hpp"
 #include "Configuration.hpp"
 
 #include <log4cpp/FileAppender.hh>
 #include <log4cpp/OstreamAppender.hh>
+#include <log4cpp/PatternLayout.hh>
 
 int main(int argc, char *argv[]) {
 
     log4cpp::Appender *appender1 = new log4cpp::OstreamAppender("console", &std::cout);
-    appender1->setLayout(new log4cpp::BasicLayout());
+    log4cpp::PatternLayout layout;
+    layout.setConversionPattern("%d [%p] %c: %m%n");
+    appender1->setLayout(&layout);
     log4cpp::Category &logger = log4cpp::Category::getRoot();
     logger.setPriority(log4cpp::Priority::NOTICE);
     logger.addAppender(appender1);
@@ -20,9 +24,11 @@ int main(int argc, char *argv[]) {
 
     config::Configuration conf(argv[1]);
 
+    sip::IncomingConnectionValidator connectionValidator(conf.getString("sip.validUriExpression"));
+
     boost::asio::io_service ioService;
 
-    sip::PjsuaCommunicator pjsuaCommunicator;
+    sip::PjsuaCommunicator pjsuaCommunicator(connectionValidator);
 
     mumble::MumbleCommunicator mumbleCommunicator(ioService);
 

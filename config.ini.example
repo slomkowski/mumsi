@@ -1,4 +1,5 @@
 [sip]
+validUriExpression = *@sip.example.com *@127.0.0.1
 host = sip.example.org
 port = 5060
 user = mumsi

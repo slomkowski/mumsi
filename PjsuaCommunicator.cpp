@@ -93,49 +93,11 @@ namespace sip {
                   communicator(comm),
                   account(acc) { }
 
-        virtual void onCallState(pj::OnCallStateParam &prm) {
-            auto ci = getInfo();
+        virtual void onCallState(pj::OnCallStateParam &prm);
 
-            communicator.logger.info("Call %d state=%s.", ci.id, ci.stateText.c_str());
+        virtual void onCallMediaState(pj::OnCallMediaStateParam &prm);
 
-            string address = ci.remoteUri;
-
-            boost::replace_all(address, "<", "");
-            boost::replace_all(address, ">", "");
-
-            if (ci.state == PJSIP_INV_STATE_CONFIRMED) {
-                auto msgText = "Incoming call from " + address + ".";
-
-                communicator.logger.notice(msgText);
-                communicator.onStateChange(msgText);
-            } else if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
-                auto msgText = "Call from " + address + " finished.";
-
-                communicator.logger.notice(msgText);
-                communicator.onStateChange(msgText);
-
-                delete this;
-            }
-        }
-
-        virtual void onCallMediaState(pj::OnCallMediaStateParam &prm) {
-            auto ci = getInfo();
-
-            if (ci.media.size() != 1) {
-                throw sip::Exception("ci.media.size is not 1");
-            }
-
-            if (ci.media[0].status == PJSUA_CALL_MEDIA_ACTIVE) {
-                auto *aud_med = static_cast<pj::AudioMedia *>(getMedia(0));
-
-                communicator.media->startTransmit(*aud_med);
-                aud_med->startTransmit(*communicator.media);
-            }
-        }
-
-        virtual void onDtmfDigit(pj::OnDtmfDigitParam &prm) {
-            communicator.logger.notice("DTMF digit '%s' (call %d).", prm.digit.c_str(), getId());
-        }
+        virtual void onDtmfDigit(pj::OnDtmfDigitParam &prm);
 
     private:
         sip::PjsuaCommunicator &communicator;
@@ -147,33 +109,100 @@ namespace sip {
         _Account(sip::PjsuaCommunicator &comm)
                 : communicator(comm) { }
 
-        virtual void onRegState(pj::OnRegStateParam &prm) {
-            pj::AccountInfo ai = getInfo();
-            communicator.logger << log4cpp::Priority::INFO
-            << (ai.regIsActive ? "Register:" : "Unregister:") << " code=" << prm.code;
-        }
+        virtual void onRegState(pj::OnRegStateParam &prm);
 
-        virtual void onIncomingCall(pj::OnIncomingCallParam &iprm) {
-            auto *call = new _Call(communicator, *this, iprm.callId);
-
-            communicator.logger.info("Incoming call from %s.", call->getInfo().remoteUri.c_str());
-
-            pj::CallOpParam param;
-            param.statusCode = PJSIP_SC_OK;
-
-            call->answer(param);
-        }
+        virtual void onIncomingCall(pj::OnIncomingCallParam &iprm);
 
     private:
         sip::PjsuaCommunicator &communicator;
 
+        bool available = true;
+
         friend class _Call;
     };
+
+    void _Call::onCallState(pj::OnCallStateParam &prm) {
+        auto ci = getInfo();
+
+        communicator.logger.info("Call %d state=%s.", ci.id, ci.stateText.c_str());
+
+        string address = ci.remoteUri;
+
+        boost::replace_all(address, "<", "");
+        boost::replace_all(address, ">", "");
+
+        if (ci.state == PJSIP_INV_STATE_CONFIRMED) {
+            auto msgText = "Incoming call from " + address + ".";
+
+            communicator.logger.notice(msgText);
+            communicator.onStateChange(msgText);
+        } else if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
+            auto msgText = "Call from " + address + " finished.";
+
+            communicator.logger.notice(msgText);
+            communicator.onStateChange(msgText);
+
+            dynamic_cast<_Account &>(account).available = true;
+
+            delete this;
+        }
+    }
+
+    void _Call::onCallMediaState(pj::OnCallMediaStateParam &prm) {
+        auto ci = getInfo();
+
+        if (ci.media.size() != 1) {
+            throw sip::Exception("ci.media.size is not 1");
+        }
+
+        if (ci.media[0].status == PJSUA_CALL_MEDIA_ACTIVE) {
+            auto *aud_med = static_cast<pj::AudioMedia *>(getMedia(0));
+
+            communicator.media->startTransmit(*aud_med);
+            aud_med->startTransmit(*communicator.media);
+        } else if (ci.media[0].status == PJSUA_CALL_MEDIA_NONE) {
+            dynamic_cast<_Account &>(account).available = true;
+        }
+    }
+
+    void _Call::onDtmfDigit(pj::OnDtmfDigitParam &prm) {
+        communicator.logger.notice("DTMF digit '%s' (call %d).", prm.digit.c_str(), getId());
+    }
+
+    void _Account::onRegState(pj::OnRegStateParam &prm) {
+        pj::AccountInfo ai = getInfo();
+        communicator.logger << log4cpp::Priority::INFO
+        << (ai.regIsActive ? "Register:" : "Unregister:") << " code=" << prm.code;
+    }
+
+    void _Account::onIncomingCall(pj::OnIncomingCallParam &iprm) {
+        auto *call = new _Call(communicator, *this, iprm.callId);
+
+        string uri = call->getInfo().remoteUri;
+
+        communicator.logger.info("Incoming call from %s.", uri.c_str());
+
+        if (communicator.uriValidator.validateUri(uri)) {
+            pj::CallOpParam param;
+
+            if (available) {
+                param.statusCode = PJSIP_SC_OK;
+                available = false;
+            } else {
+                param.statusCode = PJSIP_SC_BUSY_EVERYWHERE;
+            }
+
+            call->answer(param);
+        } else {
+            communicator.logger.warn("Refusing call from %s.", uri.c_str());
+        }
+    }
 }
 
-sip::PjsuaCommunicator::PjsuaCommunicator()
+sip::PjsuaCommunicator::PjsuaCommunicator(IncomingConnectionValidator &validator)
         : logger(log4cpp::Category::getInstance("SipCommunicator")),
-          pjsuaLogger(log4cpp::Category::getInstance("Pjsua")) {
+          pjsuaLogger(log4cpp::Category::getInstance("Pjsua")),
+          uriValidator(validator) {
 
     logWriter.reset(new sip::_LogWriter(pjsuaLogger));
 

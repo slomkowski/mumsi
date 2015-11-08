@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ICommunicator.hpp"
+#include "IncomingConnectionValidator.hpp"
 
 #include <pjmedia.h>
 #include <pjsua-lib/pjsua.h>
@@ -56,7 +57,7 @@ namespace sip {
 
     class PjsuaCommunicator : public ICommunicator, boost::noncopyable {
     public:
-        PjsuaCommunicator();
+        PjsuaCommunicator(IncomingConnectionValidator &validator);
 
         void connect(
                 std::string host,
@@ -89,6 +90,8 @@ namespace sip {
         pjmedia_circ_buf *inputBuff;
 
         std::mutex inBuffAccessMutex;
+
+        IncomingConnectionValidator &uriValidator;
 
         void registerAccount(std::string host,
                              std::string user,
