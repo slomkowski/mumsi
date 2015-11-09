@@ -40,6 +40,8 @@ make
 cp config.ini.example config.ini
 ```
 
+Remember to add URIs which you want to make calls from. Calls from other URIs won't be answered.
+
 * To run the service, type:
 ```
 ./mumsi config.ini
@@ -54,7 +56,6 @@ In this case, use *snd-dummy* sound module.
 
 ## TODO:
 
-* SIP authentication - for now it answers every call
 * multiple simultaneous connections
 * outgoing connections
 * text chat commands

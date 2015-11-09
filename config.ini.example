@@ -1,4 +1,7 @@
 [sip]
+# list of valid SIP URIs for incoming connections separated by space
+# supported wildcards: *
+# if you want to allow calls from any URI, write *@*
 validUriExpression = *@sip.example.com *@127.0.0.1
 host = sip.example.org
 port = 5060

@@ -137,12 +137,16 @@ namespace sip {
             communicator.logger.notice(msgText);
             communicator.onStateChange(msgText);
         } else if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
-            auto msgText = "Call from " + address + " finished.";
+            auto &acc = dynamic_cast<_Account &>(account);
 
-            communicator.logger.notice(msgText);
-            communicator.onStateChange(msgText);
+            if (not acc.available) {
+                auto msgText = "Call from " + address + " finished.";
 
-            dynamic_cast<_Account &>(account).available = true;
+                communicator.logger.notice(msgText);
+                communicator.onStateChange(msgText);
+
+                acc.available = true;
+            }
 
             delete this;
         }
@@ -182,8 +186,9 @@ namespace sip {
 
         communicator.logger.info("Incoming call from %s.", uri.c_str());
 
+        pj::CallOpParam param;
+
         if (communicator.uriValidator.validateUri(uri)) {
-            pj::CallOpParam param;
 
             if (available) {
                 param.statusCode = PJSIP_SC_OK;
@@ -195,6 +200,8 @@ namespace sip {
             call->answer(param);
         } else {
             communicator.logger.warn("Refusing call from %s.", uri.c_str());
+            param.statusCode = PJSIP_SC_DECLINE;
+            call->hangup(param);
         }
     }
 }
