@@ -200,7 +200,7 @@ namespace sip {
             call->answer(param);
         } else {
             communicator.logger.warn("Refusing call from %s.", uri.c_str());
-            param.statusCode = PJSIP_SC_DECLINE;
+            param.statusCode = PJSIP_SC_SERVICE_UNAVAILABLE;
             call->hangup(param);
         }
     }
