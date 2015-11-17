@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ICommunicator.hpp"
 #include "IncomingConnectionValidator.hpp"
+#include "AudioFramesMixer.hpp"
 
 #include <pjmedia.h>
 #include <pjsua-lib/pjsua.h>
@@ -15,7 +15,6 @@
 
 #include <string>
 #include <stdexcept>
-#include <mutex>
 #include <climits>
 #include <bits/unique_ptr.h>
 
@@ -55,7 +54,7 @@ namespace sip {
 
     class _MumlibAudioMedia;
 
-    class PjsuaCommunicator : public ICommunicator, boost::noncopyable {
+    class PjsuaCommunicator : boost::noncopyable {
     public:
         PjsuaCommunicator(IncomingConnectionValidator &validator);
 
@@ -65,9 +64,15 @@ namespace sip {
                 std::string password,
                 unsigned int port = DEFAULT_PORT);
 
-        ~PjsuaCommunicator();
+        virtual ~PjsuaCommunicator();
 
-        virtual void sendPcmSamples(int16_t *samples, unsigned int length) override;
+        void sendPcmSamples(
+                int sessionId,
+                int sequenceNumber,
+                int16_t *samples,
+                unsigned int length);
+
+        std::function<void(int16_t *, int)> onIncomingPcmSamples;
 
         std::function<void(std::string)> onStateChange;
 
@@ -79,17 +84,15 @@ namespace sip {
         log4cpp::Category &logger;
         log4cpp::Category &pjsuaLogger;
 
+        std::unique_ptr<mixer::AudioFramesMixer> mixer;
+
         std::unique_ptr<_LogWriter> logWriter;
         std::unique_ptr<_Account> account;
         std::unique_ptr<_MumlibAudioMedia> media;
 
+        pj_caching_pool cachingPool;
+
         pj::Endpoint endpoint;
-
-        pj_pool_t *pool = nullptr;
-
-        pjmedia_circ_buf *inputBuff;
-
-        std::mutex inBuffAccessMutex;
 
         IncomingConnectionValidator &uriValidator;
 

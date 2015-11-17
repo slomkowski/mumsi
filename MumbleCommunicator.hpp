@@ -1,7 +1,5 @@
 #pragma once
 
-#include "ICommunicator.hpp"
-
 #include <mumlib.hpp>
 
 #include <log4cpp/Category.hh>
@@ -19,7 +17,7 @@ namespace mumble {
 
     class MumlibCallback;
 
-    class MumbleCommunicator : public ICommunicator, boost::noncopyable {
+    class MumbleCommunicator : boost::noncopyable {
     public:
         MumbleCommunicator(
                 boost::asio::io_service &ioService);
@@ -30,9 +28,15 @@ namespace mumble {
                 std::string host,
                 int port = 0);
 
-        ~MumbleCommunicator();
+        virtual ~MumbleCommunicator();
 
-        virtual void sendPcmSamples(int16_t *samples, unsigned int length) override;
+        void sendPcmSamples(int16_t *samples, unsigned int length);
+
+        /**
+         * This callback is called when communicator has received samples.
+         * Arguments: session ID, sequence number, PCM samples, length of samples
+         */
+        std::function<void(int, int, int16_t *, int)> onIncomingPcmSamples;
 
         void sendTextMessage(std::string message);
 

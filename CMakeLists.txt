@@ -24,11 +24,12 @@ set(SOURCE_FILES
         PjsuaCommunicator.hpp
         MumbleCommunicator.cpp
         MumbleCommunicator.hpp
-        ICommunicator.hpp
         Configuration.cpp
         Configuration.hpp
         IncomingConnectionValidator.cpp
-        IncomingConnectionValidator.hpp)
+        IncomingConnectionValidator.hpp
+        AudioFramesMixer.hpp
+        AudioFramesMixer.cpp)
 
 add_executable(mumsi ${SOURCE_FILES} main.cpp)
 target_link_libraries(mumsi ${PJSIP_LIBRARIES})

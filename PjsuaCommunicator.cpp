@@ -226,19 +226,9 @@ sip::PjsuaCommunicator::PjsuaCommunicator(IncomingConnectionValidator &validator
 
     endpoint.libInit(endpointConfig);
 
-    pj_status_t status;
-    pj_caching_pool cachingPool;
     pj_caching_pool_init(&cachingPool, &pj_pool_factory_default_policy, 0);
-    pool = pj_pool_create(&cachingPool.factory, "media", 32768, 8192, nullptr);
-    if (!pool) {
-        throw sip::Exception("error when creating memory pool", status);
-    }
 
-    // todo calculate sizes
-    status = pjmedia_circ_buf_create(pool, 960 * 10, &inputBuff);
-    if (status != PJ_SUCCESS) {
-        throw sip::Exception("error when creating circular buffer", status);
-    }
+    mixer.reset(new mixer::AudioFramesMixer(cachingPool.factory));
 
     media.reset(new _MumlibAudioMedia(*this));
 }
@@ -269,25 +259,22 @@ sip::PjsuaCommunicator::~PjsuaCommunicator() {
     endpoint.libDestroy();
 }
 
+void sip::PjsuaCommunicator::sendPcmSamples(int sessionId, int sequenceNumber, int16_t *samples, unsigned int length) {
+    mixer->addFrameToBuffer(sessionId, sequenceNumber, samples, length);
+}
 
 pj_status_t sip::PjsuaCommunicator::mediaPortGetFrame(pjmedia_port *port, pjmedia_frame *frame) {
-    std::unique_lock<std::mutex> lock(inBuffAccessMutex);
-
     frame->type = PJMEDIA_FRAME_TYPE_AUDIO;
     pj_int16_t *samples = static_cast<pj_int16_t *>(frame->buf);
     pj_size_t count = frame->size / 2 / PJMEDIA_PIA_CCNT(&(port->info));
 
-    pj_size_t availableSamples = pjmedia_circ_buf_get_len(inputBuff);
-    const int samplesToRead = std::min(count, availableSamples);
+    const int readSamples = mixer->getMixedSamples(samples, count);
 
-    pjsuaLogger.debug("Pulling %d samples from in-buff.", samplesToRead);
-    pjmedia_circ_buf_read(inputBuff, samples, samplesToRead);
+    if (readSamples < count) {
+        pjsuaLogger.debug("Requested %d samples, available %d, filling remaining with zeros.",
+                          count, readSamples);
 
-    if (availableSamples < count) {
-        pjsuaLogger.debug("Requested %d samples, available %d, filling remaining with zeros.", count,
-                          availableSamples);
-
-        for (int i = samplesToRead; i < count; ++i) {
+        for (int i = readSamples; i < count; ++i) {
             samples[i] = 0;
         }
     }
@@ -321,10 +308,4 @@ void sip::PjsuaCommunicator::registerAccount(string host, string user, string pa
     logger.info("Registering account for URI: %s.", uri.c_str());
     account.reset(new _Account(*this));
     account->create(accountConfig);
-}
-
-void sip::PjsuaCommunicator::sendPcmSamples(int16_t *samples, unsigned int length) {
-    std::unique_lock<std::mutex> lock(inBuffAccessMutex);
-    pjsuaLogger.debug("Pushing %d samples to in-buff.", length);
-    pjmedia_circ_buf_write(inputBuff, samples, length);
 }

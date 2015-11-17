@@ -45,7 +45,7 @@ int main(int argc, char *argv[]) {
     mumbleCommunicator.onIncomingPcmSamples = std::bind(
             &sip::PjsuaCommunicator::sendPcmSamples,
             &pjsuaCommunicator,
-            _1, _2);
+            _1, _2, _3, _4);
 
     mumbleCommunicator.connect(
             conf.getString("mumble.user"),
