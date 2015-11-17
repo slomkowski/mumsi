@@ -39,7 +39,7 @@ namespace sip {
             mesg += errorMsgBuffer;
         }
 
-        virtual const char *what() const throw() {
+        virtual const char *what() const throw() override {
             return mesg.c_str();
         }
 
@@ -67,7 +67,7 @@ namespace sip {
 
         ~PjsuaCommunicator();
 
-        virtual void sendPcmSamples(int16_t *samples, unsigned int length);
+        virtual void sendPcmSamples(int16_t *samples, unsigned int length) override;
 
         std::function<void(std::string)> onStateChange;
 

@@ -16,7 +16,7 @@ namespace sip {
         _LogWriter(Category &logger)
                 : logger(logger) { }
 
-        virtual void write(const pj::LogEntry &entry) {
+        virtual void write(const pj::LogEntry &entry) override {
 
             auto message = entry.msg.substr(0, entry.msg.size() - 1); // remove newline
 
@@ -93,11 +93,11 @@ namespace sip {
                   communicator(comm),
                   account(acc) { }
 
-        virtual void onCallState(pj::OnCallStateParam &prm);
+        virtual void onCallState(pj::OnCallStateParam &prm) override;
 
-        virtual void onCallMediaState(pj::OnCallMediaStateParam &prm);
+        virtual void onCallMediaState(pj::OnCallMediaStateParam &prm) override;
 
-        virtual void onDtmfDigit(pj::OnDtmfDigitParam &prm);
+        virtual void onDtmfDigit(pj::OnDtmfDigitParam &prm) override;
 
     private:
         sip::PjsuaCommunicator &communicator;
@@ -109,9 +109,9 @@ namespace sip {
         _Account(sip::PjsuaCommunicator &comm)
                 : communicator(comm) { }
 
-        virtual void onRegState(pj::OnRegStateParam &prm);
+        virtual void onRegState(pj::OnRegStateParam &prm) override;
 
-        virtual void onIncomingCall(pj::OnIncomingCallParam &iprm);
+        virtual void onIncomingCall(pj::OnIncomingCallParam &iprm) override;
 
     private:
         sip::PjsuaCommunicator &communicator;
@@ -328,4 +328,3 @@ void sip::PjsuaCommunicator::sendPcmSamples(int16_t *samples, unsigned int lengt
     pjsuaLogger.debug("Pushing %d samples to in-buff.", length);
     pjmedia_circ_buf_write(inputBuff, samples, length);
 }
-

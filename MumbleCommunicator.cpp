@@ -10,8 +10,11 @@ namespace mumble {
         MumbleCommunicator *communicator;
 
         virtual void audio(
+                int target,
+                int sessionId,
+                int sequenceNumber,
                 int16_t *pcm_data,
-                uint32_t pcm_data_size) {
+                uint32_t pcm_data_size) override {
             communicator->onIncomingPcmSamples(pcm_data, pcm_data_size);
         }
     };

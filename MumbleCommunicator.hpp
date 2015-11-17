@@ -32,7 +32,7 @@ namespace mumble {
 
         ~MumbleCommunicator();
 
-        virtual void sendPcmSamples(int16_t *samples, unsigned int length);
+        virtual void sendPcmSamples(int16_t *samples, unsigned int length) override;
 
         void sendTextMessage(std::string message);
 
