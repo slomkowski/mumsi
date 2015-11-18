@@ -142,6 +142,8 @@ namespace sip {
             if (not acc.available) {
                 auto msgText = "Call from " + address + " finished.";
 
+                communicator.mixer->clear();
+
                 communicator.logger.notice(msgText);
                 communicator.onStateChange(msgText);
 

@@ -6,16 +6,19 @@
 #include <boost/noncopyable.hpp>
 
 #include <mutex>
+#include <unordered_map>
 
 namespace mixer {
 
+    constexpr int MAX_BUFFER_LENGTH = 5000;
+
     class Exception : public std::runtime_error {
     public:
-        Exception(const char *title) : std::runtime_error(title) {
+        Exception(std::string title) : std::runtime_error(title) {
             mesg += title;
         }
 
-        Exception(const char *title, pj_status_t status) : std::runtime_error(title) {
+        Exception(std::string title, pj_status_t status) : std::runtime_error(title) {
             char errorMsgBuffer[500];
             pj_strerror(status, errorMsgBuffer, sizeof(errorMsgBuffer));
 
@@ -42,14 +45,14 @@ namespace mixer {
 
         int getMixedSamples(int16_t *mixedSamples, int requestedLength);
 
-        void clean();
+        void clear();
 
     private:
         log4cpp::Category &logger;
 
         pj_pool_t *pool = nullptr;
 
-        pjmedia_circ_buf *inputBuff;
+        std::unordered_map<int, pjmedia_circ_buf *> buffersMap;
 
         std::mutex inBuffAccessMutex;
     };
