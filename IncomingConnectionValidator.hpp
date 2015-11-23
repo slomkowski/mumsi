@@ -4,7 +4,7 @@
 #include <log4cpp/Category.hh>
 
 #include <string>
-#include <regex>
+#include <boost/regex.hpp>
 
 namespace sip {
     class IncomingConnectionValidator : boost::noncopyable {
@@ -16,6 +16,6 @@ namespace sip {
     private:
         log4cpp::Category &logger;
         std::string validUriExpression;
-        std::vector<std::regex> uriRegexVec;
+        std::vector<boost::regex> uriRegexVec;
     };
 }
