@@ -13,3 +13,4 @@ host = example.org
 port = 64738
 user = mumsi
 password = foobar
+channelNameExpression =
