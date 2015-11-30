@@ -38,7 +38,17 @@ namespace mumble {
          */
         std::function<void(int, int, int16_t *, int)> onIncomingPcmSamples;
 
+        /**
+         * This callback is called when a channel state message (e.g. Channel
+         * information) is received. Arguments: channel_id, name
+         */
+        std::function<void(std::string, int)> onIncomingChannelState;
+
+        std::function<void()> onServerSync;
+
         void sendTextMessage(std::string message);
+
+        void joinChannel(int channel_id);
 
     public:
         boost::asio::io_service &ioService;
