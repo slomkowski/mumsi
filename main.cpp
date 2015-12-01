@@ -1,6 +1,7 @@
 #include "PjsuaCommunicator.hpp"
 #include "MumbleCommunicator.hpp"
 #include "IncomingConnectionValidator.hpp"
+#include "MumbleChannelJoiner.hpp"
 #include "Configuration.hpp"
 
 #include <log4cpp/FileAppender.hh>
@@ -32,6 +33,8 @@ int main(int argc, char *argv[]) {
 
     mumble::MumbleCommunicator mumbleCommunicator(ioService);
 
+    mumble::MumbleChannelJoiner mumbleChannelJoiner(conf.getString("mumble.channelNameExpression"));
+
     using namespace std::placeholders;
     pjsuaCommunicator.onIncomingPcmSamples = std::bind(
             &mumble::MumbleCommunicator::sendPcmSamples,
@@ -46,6 +49,17 @@ int main(int argc, char *argv[]) {
             &sip::PjsuaCommunicator::sendPcmSamples,
             &pjsuaCommunicator,
             _1, _2, _3, _4);
+
+    mumbleCommunicator.onIncomingChannelState = std::bind(
+        &mumble::MumbleChannelJoiner::checkChannel,
+        &mumbleChannelJoiner,
+        _1, _2);
+
+    mumbleCommunicator.onServerSync = std::bind(
+        &mumble::MumbleChannelJoiner::maybeJoinChannel,
+        &mumbleChannelJoiner,
+        &mumbleCommunicator);
+
 
     mumbleCommunicator.connect(
             conf.getString("mumble.user"),

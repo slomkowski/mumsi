@@ -24,6 +24,8 @@ set(SOURCE_FILES
         PjsuaCommunicator.hpp
         MumbleCommunicator.cpp
         MumbleCommunicator.hpp
+        MumbleChannelJoiner.cpp
+        MumbleChannelJoiner.hpp
         Configuration.cpp
         Configuration.hpp
         IncomingConnectionValidator.cpp
