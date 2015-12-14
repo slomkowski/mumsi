@@ -8,7 +8,24 @@
 #include <log4cpp/OstreamAppender.hh>
 #include <log4cpp/PatternLayout.hh>
 
+#include <execinfo.h>
+
+/*
+ * Code from http://stackoverflow.com/a/77336/5419223
+ */
+static void sigsegv_handler(int sig) {
+    constexpr int STACK_DEPTH = 10;
+    void *array[STACK_DEPTH];
+
+    size_t size = backtrace(array, STACK_DEPTH);
+
+    fprintf(stderr, "ERROR: signal %d:\n", sig);
+    backtrace_symbols_fd(array, size, STDERR_FILENO);
+    exit(1);
+}
+
 int main(int argc, char *argv[]) {
+    signal(SIGSEGV, sigsegv_handler);
 
     log4cpp::Appender *appender1 = new log4cpp::OstreamAppender("console", &std::cout);
     log4cpp::PatternLayout layout;
@@ -51,14 +68,14 @@ int main(int argc, char *argv[]) {
             _1, _2, _3, _4);
 
     mumbleCommunicator.onIncomingChannelState = std::bind(
-        &mumble::MumbleChannelJoiner::checkChannel,
-        &mumbleChannelJoiner,
-        _1, _2);
+            &mumble::MumbleChannelJoiner::checkChannel,
+            &mumbleChannelJoiner,
+            _1, _2);
 
     mumbleCommunicator.onServerSync = std::bind(
-        &mumble::MumbleChannelJoiner::maybeJoinChannel,
-        &mumbleChannelJoiner,
-        &mumbleCommunicator);
+            &mumble::MumbleChannelJoiner::maybeJoinChannel,
+            &mumbleChannelJoiner,
+            &mumbleCommunicator);
 
 
     mumbleCommunicator.connect(
