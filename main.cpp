@@ -27,17 +27,17 @@ static void sigsegv_handler(int sig) {
 int main(int argc, char *argv[]) {
     signal(SIGSEGV, sigsegv_handler);
 
-    log4cpp::Appender *appender1 = new log4cpp::OstreamAppender("console", &std::cout);
+    log4cpp::OstreamAppender appender("console", &std::cout);
     log4cpp::PatternLayout layout;
     layout.setConversionPattern("%d [%p] %c: %m%n");
-    appender1->setLayout(&layout);
+    appender.setLayout(&layout);
     log4cpp::Category &logger = log4cpp::Category::getRoot();
     logger.setPriority(log4cpp::Priority::NOTICE);
-    logger.addAppender(appender1);
+    logger.addAppender(appender);
 
     if (argc == 1) {
         logger.crit("No configuration file provided. Use %s {config file}", argv[0]);
-        return 1;
+        std::exit(1);
     }
 
     config::Configuration conf(argv[1]);
