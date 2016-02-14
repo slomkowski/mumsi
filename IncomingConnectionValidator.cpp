@@ -12,13 +12,13 @@ sip::IncomingConnectionValidator::IncomingConnectionValidator(std::string validU
     boost::split(separateUris, validUriExpression, boost::is_any_of("\t "));
     for (auto &uri : separateUris) {
         boost::replace_all(uri, ".", "\\.");
-        boost::replace_all(uri, "*", "\\w*");
+        boost::replace_all(uri, "*", "[\\+\\w]*");
         uriRegexVec.push_back(boost::regex(uri));
     }
 }
 
 bool sip::IncomingConnectionValidator::validateUri(std::string uri) {
-    boost::regex addressRegex("[\"\\w ]*<sip:([\\w\\.]+@[\\w\\.]+)>");
+    boost::regex addressRegex("[\"\\+\\w ]*<sip:([\\+\\w\\.]+@[\\w\\.]+)>");
 
     boost::smatch s;
 
