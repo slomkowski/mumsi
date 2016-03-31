@@ -1,4 +1,4 @@
-# mumsi - SIP to Mumble gateway
+# *mumsi* - SIP to Mumble gateway
 
 SIP to Mumble gateway based on PJSIP stack and *mumlib* library. It registers to SIP registrar and listens for incoming
 connections on the SIP account.
@@ -27,7 +27,7 @@ make
 cd -
 ```
 
-* Then clone and build Mumsi:
+* Then clone and build *mumsi*:
 ```
 git clone https://github.com/slomkowski/mumsi.git
 mkdir mumsi/build && cd mumsi/build
@@ -47,12 +47,41 @@ Remember to add URIs which you want to make calls from. Calls from other URIs wo
 ./mumsi config.ini
 ```
 
+## Start at boot
+
+*mumsi* provides no *init.d* scripts, but you can use great daemon mangaer, [Supervisor](http://supervisord.org/).
+The sample configuration file:
+
+```ini
+[program:mumsi]
+command=/home/mumsi/mumsi-dist/mumsi/build/mumsi config.ini
+directory=/home/mumsi/mumsi-dist/mumsi
+user=mumsi
+
+stdout_logfile=/home/mumsi/console.log
+stdout_logfile_maxbytes=1MB
+stdout_logfile_backups=4
+stdout_capture_maxbytes=1MB
+redirect_stderr=true
+```
+
+
 ## Issues
 
-* remember to allow incoming connections on port 5060 UDP in your firewall
+#### Port and NAT
 
-* PJSIP packages in some distributions require to have a sound card in your system, which can be an issue on the server.
-In this case, use *snd-dummy* sound module.
+Remember to allow incoming connections on port 5060 UDP in your firewall. If you're connecting to public SIP provider from machine behind NAT, make sure your setup works using some generic SIP client. Since SIP is not NAT-friendly by design, PJSIP usually takes care of connection negotiation and NAT traversal, but might fail. The most reliable solution is to configure port forwarding on your home router to your PC.
+
+#### `PJ_EINVALIDOP` error
+
+You may encounter following error when running *mumsi* on older distros
+
+```
+pjsua_conf_add_port(mediaPool, (pjmedia_port *)port, &id) error: Invalid operation (PJ_EINVALIDOP)
+```
+
+Some older versions of PJSIP are affected (confirmed for 2.3). In this case you have to update PJSIP to most recent version (2.4.5).
+
 
 ## TODO:
 
@@ -62,4 +91,4 @@ In this case, use *snd-dummy* sound module.
 
 ## Credits
 
-2015 Michał Słomkowski. The code is published under the terms of Apache License 2.0.
+2015, 2016 Michał Słomkowski. The code is published under the terms of Apache License 2.0.
