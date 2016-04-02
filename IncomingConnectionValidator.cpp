@@ -18,7 +18,7 @@ sip::IncomingConnectionValidator::IncomingConnectionValidator(std::string validU
 }
 
 bool sip::IncomingConnectionValidator::validateUri(std::string uri) {
-    boost::regex addressRegex("[\"\\+\\w ]*<sip:([\\+\\w\\.]+@[\\w\\.]+)>");
+    boost::regex addressRegex("[\"\\+\\w\\. ]*<?sip:([\\+\\w\\.]+@[\\w\\.]+)>?");
 
     boost::smatch s;
 
