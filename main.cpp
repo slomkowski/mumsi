@@ -77,12 +77,14 @@ int main(int argc, char *argv[]) {
             &mumbleChannelJoiner,
             &mumbleCommunicator);
 
+    mumble::MumbleCommunicatorConfig mumbleConf;
+    mumbleConf.host = conf.getString("mumble.host");
+    mumbleConf.port = conf.getInt("mumble.port");
+    mumbleConf.user = conf.getString("mumble.user");
+    mumbleConf.password = conf.getString("mumble.password");
+    mumbleConf.opusEncoderBitrate = conf.getInt("mumble.opusEncoderBitrate");
 
-    mumbleCommunicator.connect(
-            conf.getString("mumble.user"),
-            conf.getString("mumble.password"),
-            conf.getString("mumble.host"),
-            conf.getInt("mumble.port"));
+    mumbleCommunicator.connect(mumbleConf);
 
     pjsuaCommunicator.connect(
             conf.getString("sip.host"),

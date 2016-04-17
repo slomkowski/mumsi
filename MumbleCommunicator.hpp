@@ -17,16 +17,20 @@ namespace mumble {
 
     class MumlibCallback;
 
+    struct MumbleCommunicatorConfig {
+        std::string user;
+        std::string password;
+        std::string host;
+        int opusEncoderBitrate;
+        int port = 0;
+    };
+
     class MumbleCommunicator : boost::noncopyable {
     public:
         MumbleCommunicator(
                 boost::asio::io_service &ioService);
 
-        void connect(
-                std::string user,
-                std::string password,
-                std::string host,
-                int port = 0);
+        void connect(MumbleCommunicatorConfig &config);
 
         virtual ~MumbleCommunicator();
 
@@ -50,10 +54,12 @@ namespace mumble {
 
         void joinChannel(int channel_id);
 
-    public:
+    private:
         boost::asio::io_service &ioService;
 
         log4cpp::Category &logger;
+
+        mumlib::MumlibConfiguration mumConfig;
 
         std::shared_ptr<mumlib::Mumlib> mum;
 

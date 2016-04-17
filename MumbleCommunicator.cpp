@@ -47,19 +47,18 @@ mumble::MumbleCommunicator::MumbleCommunicator(boost::asio::io_service &ioServic
           logger(log4cpp::Category::getInstance("MumbleCommunicator")) {
 }
 
-void mumble::MumbleCommunicator::connect(
-        std::string user,
-        std::string password,
-        std::string host,
-        int port) {
+void mumble::MumbleCommunicator::connect(MumbleCommunicatorConfig &config) {
 
     callback.reset(new MumlibCallback());
 
-    mum.reset(new mumlib::Mumlib(*callback, ioService));
+    mumConfig = mumlib::MumlibConfiguration();
+    mumConfig.opusEncoderBitrate = config.opusEncoderBitrate;
+
+    mum.reset(new mumlib::Mumlib(*callback, ioService, mumConfig));
     callback->communicator = this;
     callback->mum = mum;
 
-    mum->connect(host, port, user, password);
+    mum->connect(config.host, config.port, config.user, config.password);
 }
 
 void mumble::MumbleCommunicator::sendPcmSamples(int16_t *samples, unsigned int length) {
