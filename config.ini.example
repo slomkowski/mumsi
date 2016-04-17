@@ -1,3 +1,7 @@
+[general]
+# valid values for log level are: ERROR, WARN, NOTICE, INFO, DEBUG
+logLevel = NOTICE
+
 [sip]
 # list of valid SIP URIs for incoming connections separated by space
 # supported wildcards: *

@@ -42,6 +42,8 @@ int main(int argc, char *argv[]) {
 
     config::Configuration conf(argv[1]);
 
+    logger.setPriority(log4cpp::Priority::getPriorityValue(conf.getString("general.logLevel")));
+
     sip::IncomingConnectionValidator connectionValidator(conf.getString("sip.validUriExpression"));
 
     boost::asio::io_service ioService;
