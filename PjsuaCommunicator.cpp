@@ -38,9 +38,9 @@ namespace sip {
 
     class _MumlibAudioMedia : public pj::AudioMedia {
     public:
-        _MumlibAudioMedia(sip::PjsuaCommunicator &comm)
+        _MumlibAudioMedia(sip::PjsuaCommunicator &comm, int frameTimeLength)
                 : communicator(comm) {
-            createMediaPort();
+            createMediaPort(frameTimeLength);
             registerMediaPort(&mediaPort);
         }
 
@@ -62,9 +62,18 @@ namespace sip {
             return communicator->mediaPortPutFrame(port, frame);
         }
 
-        void createMediaPort() {
+        void createMediaPort(int frameTimeLength) {
 
             auto name = pj_str((char *) "MumsiMediaPort");
+
+            if (frameTimeLength != 10
+                and frameTimeLength != 20
+                and frameTimeLength != 40
+                and frameTimeLength != 60) {
+                throw sip::Exception(
+                        (boost::format("valid frame time length value: %d. valid values are: 10, 20, 40, 60") %
+                         frameTimeLength).str());
+            }
 
             pj_status_t status = pjmedia_port_info_init(&(mediaPort.info),
                                                         &name,
@@ -72,8 +81,7 @@ namespace sip {
                                                         SAMPLING_RATE,
                                                         1,
                                                         16,
-                                                        SAMPLING_RATE * 20 /
-                                                        1000); // todo recalculate to match mumble specs
+                                                        SAMPLING_RATE * frameTimeLength / 1000);
 
             if (status != PJ_SUCCESS) {
                 throw sip::Exception("error while calling pjmedia_port_info_init()", status);
@@ -208,7 +216,7 @@ namespace sip {
     }
 }
 
-sip::PjsuaCommunicator::PjsuaCommunicator(IncomingConnectionValidator &validator)
+sip::PjsuaCommunicator::PjsuaCommunicator(IncomingConnectionValidator &validator, int frameTimeLength)
         : logger(log4cpp::Category::getInstance("SipCommunicator")),
           pjsuaLogger(log4cpp::Category::getInstance("Pjsua")),
           uriValidator(validator) {
@@ -232,7 +240,9 @@ sip::PjsuaCommunicator::PjsuaCommunicator(IncomingConnectionValidator &validator
 
     mixer.reset(new mixer::AudioFramesMixer(cachingPool.factory));
 
-    media.reset(new _MumlibAudioMedia(*this));
+    media.reset(new _MumlibAudioMedia(*this, frameTimeLength));
+
+    logger.info("Created Pjsua communicator with frame length %d ms.", frameTimeLength);
 }
 
 void sip::PjsuaCommunicator::connect(

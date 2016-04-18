@@ -29,6 +29,10 @@ namespace sip {
             mesg += title;
         }
 
+        Exception(std::string title) : std::runtime_error(title) {
+            mesg += title;
+        }
+
         Exception(const char *title, pj_status_t status) : std::runtime_error(title) {
             char errorMsgBuffer[500];
             pj_strerror(status, errorMsgBuffer, sizeof(errorMsgBuffer));
@@ -56,7 +60,7 @@ namespace sip {
 
     class PjsuaCommunicator : boost::noncopyable {
     public:
-        PjsuaCommunicator(IncomingConnectionValidator &validator);
+        PjsuaCommunicator(IncomingConnectionValidator &validator, int frameTimeLength);
 
         void connect(
                 std::string host,

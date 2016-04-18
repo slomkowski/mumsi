@@ -2,8 +2,7 @@
 
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/ini_parser.hpp>
-
-#include <fstream>
+#include <boost/format.hpp>
 
 using namespace config;
 
@@ -17,7 +16,8 @@ namespace config {
         try {
             return tree.get<TYPE>(property);
         } catch (boost::property_tree::ptree_bad_path) {
-            throw ConfigException(std::string(typeid(TYPE).name()) + " key \'" + property + "\' not found");
+            throw ConfigException((boost::format("Configuration option '%s' (type: %s) not found.")
+                                   % property % typeid(TYPE).name()).str());
         }
     }
 }

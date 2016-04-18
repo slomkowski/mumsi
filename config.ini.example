@@ -12,10 +12,17 @@ port = 5060
 user = mumsi
 password = foobar
 
+# length of single voice frame in ms. Valid values are 10, 20, 40, 60 ms.
+# Adjust it if you need to meet the specific bandwidth requirements of Murmur server
+frameLength = 40
+
 [mumble]
 host = example.org
 port = 64738
 user = mumsi
 password = foobar
 channelNameExpression =
+
+# Bitrate of Opus encoder in B/s
+# Adjust it if you need to meet the specific bandwidth requirements of Murmur server
 opusEncoderBitrate = 16000

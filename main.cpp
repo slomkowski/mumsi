@@ -48,7 +48,7 @@ int main(int argc, char *argv[]) {
 
     boost::asio::io_service ioService;
 
-    sip::PjsuaCommunicator pjsuaCommunicator(connectionValidator);
+    sip::PjsuaCommunicator pjsuaCommunicator(connectionValidator, conf.getInt("sip.frameLength"));
 
     mumble::MumbleCommunicator mumbleCommunicator(ioService);
 
