@@ -80,6 +80,8 @@ namespace sip {
 
         std::function<void(std::string)> onStateChange;
 
+        std::function<void(int)> onMuteDeafChange;
+
         pj_status_t mediaPortGetFrame(pjmedia_port *port, pjmedia_frame *frame);
 
         pj_status_t mediaPortPutFrame(pjmedia_port *port, pjmedia_frame *frame);

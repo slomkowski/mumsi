@@ -64,6 +64,10 @@ int main(int argc, char *argv[]) {
             &mumble::MumbleCommunicator::sendTextMessage,
             &mumbleCommunicator, _1);
 
+    pjsuaCommunicator.onMuteDeafChange = std::bind(
+            &mumble::MumbleCommunicator::mutedeaf,
+            &mumbleCommunicator, _1);
+
     mumbleCommunicator.onIncomingPcmSamples = std::bind(
             &sip::PjsuaCommunicator::sendPcmSamples,
             &pjsuaCommunicator,
@@ -85,6 +89,12 @@ int main(int argc, char *argv[]) {
     mumbleConf.user = conf.getString("mumble.user");
     mumbleConf.password = conf.getString("mumble.password");
     mumbleConf.opusEncoderBitrate = conf.getInt("mumble.opusEncoderBitrate");
+    /* default to 'false' if not found */
+    try {
+        mumbleConf.autodeaf = conf.getBool("mumble.autodeaf");
+    } catch (...) {
+        mumbleConf.autodeaf = false;
+    }
 
     mumbleCommunicator.connect(mumbleConf);
 

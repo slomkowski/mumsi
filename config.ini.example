@@ -23,6 +23,11 @@ user = mumsi
 password = foobar
 channelNameExpression =
 
+# When here is no SIP connection, the mumble state is set to self_mute/self_deaf
+# so the other users can easily see whether the SIP is connected even when not
+# in the same group
+autodeaf = 0
+
 # Bitrate of Opus encoder in B/s
 # Adjust it if you need to meet the specific bandwidth requirements of Murmur server
 opusEncoderBitrate = 16000

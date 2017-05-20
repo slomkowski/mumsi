@@ -144,6 +144,7 @@ namespace sip {
 
             communicator.logger.notice(msgText);
             communicator.onStateChange(msgText);
+            communicator.onMuteDeafChange(0);
         } else if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
             auto &acc = dynamic_cast<_Account &>(account);
 
@@ -154,6 +155,7 @@ namespace sip {
 
                 communicator.logger.notice(msgText);
                 communicator.onStateChange(msgText);
+                communicator.onMuteDeafChange(1);
 
                 acc.available = true;
             }

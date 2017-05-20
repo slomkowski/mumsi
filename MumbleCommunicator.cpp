@@ -51,6 +51,8 @@ void mumble::MumbleCommunicator::connect(MumbleCommunicatorConfig &config) {
 
     callback.reset(new MumlibCallback());
 
+    mumbleConf = config;
+
     mumConfig = mumlib::MumlibConfiguration();
     mumConfig.opusEncoderBitrate = config.opusEncoderBitrate;
 
@@ -59,6 +61,7 @@ void mumble::MumbleCommunicator::connect(MumbleCommunicatorConfig &config) {
     callback->mum = mum;
 
     mum->connect(config.host, config.port, config.user, config.password);
+    mum->self_deaf(1);
 }
 
 void mumble::MumbleCommunicator::sendPcmSamples(int16_t *samples, unsigned int length) {
@@ -75,4 +78,15 @@ void mumble::MumbleCommunicator::sendTextMessage(std::string message) {
 
 void mumble::MumbleCommunicator::joinChannel(int channel_id) {
     mum->joinChannel(channel_id);
+    if ( mumbleConf.autodeaf ) {
+        mum->self_mute(1);
+        mum->self_deaf(1);
+    }
+}
+
+void mumble::MumbleCommunicator::mutedeaf(int status) {
+    if ( mumbleConf.autodeaf ) {
+        mum->self_mute(status);
+        mum->self_deaf(status);
+    }
 }

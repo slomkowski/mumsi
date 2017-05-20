@@ -8,7 +8,9 @@
 #include <string>
 #include <stdexcept>
 
+
 namespace mumble {
+
 
     class Exception : public std::runtime_error {
     public:
@@ -23,6 +25,7 @@ namespace mumble {
         std::string host;
         int opusEncoderBitrate;
         int port = 0;
+        bool autodeaf;
     };
 
     class MumbleCommunicator : boost::noncopyable {
@@ -54,10 +57,14 @@ namespace mumble {
 
         void joinChannel(int channel_id);
 
+        void mutedeaf(int status);
+
     private:
         boost::asio::io_service &ioService;
 
         log4cpp::Category &logger;
+
+        MumbleCommunicatorConfig mumbleConf;
 
         mumlib::MumlibConfiguration mumConfig;
 
@@ -66,5 +73,6 @@ namespace mumble {
         std::unique_ptr<MumlibCallback> callback;
 
         friend class MumlibCallback;
+
     };
 }
