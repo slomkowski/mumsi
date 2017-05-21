@@ -96,6 +96,13 @@ int main(int argc, char *argv[]) {
         mumbleConf.autodeaf = false;
     }
 
+    /* default to <no pin> */
+    try {
+        pjsuaCommunicator.pin = conf.getString("mumble.pin");
+    } catch (...) {
+        pjsuaCommunicator.pin = "";
+    }
+
     mumbleCommunicator.connect(mumbleConf);
 
     pjsuaCommunicator.connect(

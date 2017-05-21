@@ -144,7 +144,16 @@ namespace sip {
 
             communicator.logger.notice(msgText);
             communicator.onStateChange(msgText);
-            communicator.onMuteDeafChange(0);
+
+            communicator.got_dtmf = "";
+
+            /* 
+             * if no pin is set, go ahead and turn off mute/deaf
+             * otherwise, wait for pin to be entered
+             */
+            if ( communicator.pin.length() == 0 ) {
+                communicator.onMuteDeafChange(0);
+            }
 
         } else if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
             auto &acc = dynamic_cast<_Account &>(account);
@@ -183,7 +192,31 @@ namespace sip {
     }
 
     void _Call::onDtmfDigit(pj::OnDtmfDigitParam &prm) {
-        communicator.logger.notice("DTMF digit '%s' (call %d).", prm.digit.c_str(), getId());
+        communicator.logger.notice("DTMF digit '%s' (call %d).",
+                prm.digit.c_str(), getId());
+        pj::CallOpParam param;
+        
+        if ( communicator.pin.length() > 0 ) {
+            if ( prm.digit == "#" ) {
+                communicator.logger.notice("DTMF got string command %s",
+                        communicator.got_dtmf.c_str());
+                if ( communicator.got_dtmf == communicator.pin ) {
+                    communicator.logger.notice("Caller entered correct PIN");
+                    communicator.onMuteDeafChange(0);
+                } else {
+                    communicator.logger.notice("Caller entered wrong PIN");
+                    param.statusCode = PJSIP_SC_SERVICE_UNAVAILABLE;
+                    this->hangup(param);
+                }
+                communicator.got_dtmf = "";
+            } else {
+                communicator.logger.notice("DTMF append %s to %s",
+                        prm.digit.c_str(), communicator.got_dtmf.c_str());
+                communicator.got_dtmf = communicator.got_dtmf + prm.digit;
+            }
+        } else {
+            communicator.logger.notice("DTMF ignoring %s", prm.digit.c_str());
+        }
     }
 
     void _Account::onRegState(pj::OnRegStateParam &prm) {
@@ -324,3 +357,4 @@ void sip::PjsuaCommunicator::registerAccount(string host, string user, string pa
     account.reset(new _Account(*this));
     account->create(accountConfig);
 }
+

@@ -76,6 +76,9 @@ namespace sip {
                 int16_t *samples,
                 unsigned int length);
 
+        std::string pin;
+        std::string got_dtmf;
+
         std::function<void(int16_t *, int)> onIncomingPcmSamples;
 
         std::function<void(std::string)> onStateChange;
