@@ -107,6 +107,9 @@ namespace sip {
 
         virtual void onDtmfDigit(pj::OnDtmfDigitParam &prm) override;
 
+        virtual void playAudioFile(std::string file);
+        virtual void playAudioFile(std::string file, bool in_chan);
+
     private:
         sip::PjsuaCommunicator &communicator;
         pj::Account &account;
@@ -145,14 +148,24 @@ namespace sip {
             communicator.logger.notice(msgText);
             communicator.onStateChange(msgText);
 
+            pj_thread_sleep(500); // sleep a moment to allow connection to stabilize
+            this->playAudioFile(communicator.file_welcome);
+
             communicator.got_dtmf = "";
 
             /* 
              * if no pin is set, go ahead and turn off mute/deaf
              * otherwise, wait for pin to be entered
              */
-            if ( communicator.pin.length() == 0 ) {
+            if ( communicator.caller_pin.length() == 0 ) {
+                // No PIN set... enter DTMF root menu and turn off mute/deaf
+                communicator.dtmf_mode = DTMF_MODE_ROOT;
                 communicator.onMuteDeafChange(0);
+            } else {
+                // PIN set... enter DTMF unauth menu and play PIN prompt message
+                communicator.dtmf_mode = DTMF_MODE_UNAUTH;
+                pj_thread_sleep(500); // pause briefly after announcement
+                this->playAudioFile(communicator.file_prompt_pin);
             }
 
         } else if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
@@ -191,32 +204,184 @@ namespace sip {
         }
     }
 
+    void _Call::playAudioFile(std::string file) {
+        this->playAudioFile(file, false); // default is NOT to echo to mumble
+    }
+
+    /* TODO:
+     * - local deafen before playing and undeafen after?
+     */
+    void _Call::playAudioFile(std::string file, bool in_chan) {
+        communicator.logger.notice("Entered playAudioFile(%s)", file.c_str());
+        pj::AudioMediaPlayer player;
+        pj::MediaFormatAudio mfa;
+        pj::AudioMediaPlayerInfo pinfo;
+        int wavsize;
+        int sleeptime;
+
+        if ( ! pj_file_exists(file.c_str()) ) {
+            communicator.logger.warn("File not found (%s)", file.c_str());
+            return;
+        }
+
+        /* TODO: use some library to get the actual length in millisec
+         *
+         * This just gets the file size and divides by a constant to
+         * estimate the length of the WAVE file in milliseconds.
+         * This depends on the encoding bitrate, etc.
+         */
+
+        auto ci = getInfo();
+        if (ci.media.size() != 1) {
+            throw sip::Exception("ci.media.size is not 1");
+        }
+
+        if (ci.media[0].status == PJSUA_CALL_MEDIA_ACTIVE) {
+            auto *aud_med = static_cast<pj::AudioMedia *>(getMedia(0));
+
+            try {
+                player.createPlayer(file, PJMEDIA_FILE_NO_LOOP);
+                pinfo = player.getInfo();
+                sleeptime = pinfo.sizeBytes / (pinfo.payloadBitsPerSample * 3);
+
+                /*
+                communicator.logger.notice("DEBUG: wavsize=%d pbps=%d bytes=%d samples=%d", 
+                        wavsize, pinfo.payloadBitsPerSample, pinfo.sizeBytes, pinfo.sizeSamples);
+                communicator.logger.notice("WAVE length in ms: %d", sleeptime);
+                */
+
+                if ( in_chan ) { // choose the target sound output
+                    player.startTransmit(*communicator.media);
+                } else {
+                    player.startTransmit(*aud_med);
+                }
+
+                pj_thread_sleep(sleeptime);
+
+                if ( in_chan ) { // choose the target sound output
+                    player.stopTransmit(*communicator.media);
+                } else {
+                    player.stopTransmit(*aud_med);
+                }
+
+            } catch (...) {
+                communicator.logger.notice("Error playing file %s", file.c_str());
+            }
+        } else {
+            communicator.logger.notice("Call not active - can't play file %s", file.c_str());
+        }
+    }
+
     void _Call::onDtmfDigit(pj::OnDtmfDigitParam &prm) {
         //communicator.logger.notice("DTMF digit '%s' (call %d).",
         //        prm.digit.c_str(), getId());
         pj::CallOpParam param;
-        
-        if ( communicator.pin.length() > 0 ) {
-            if ( prm.digit == "#" ) {
-                //communicator.logger.notice("DTMF got string command %s",
-                //        communicator.got_dtmf.c_str());
-                if ( communicator.got_dtmf == communicator.pin ) {
-                    communicator.logger.notice("Caller entered correct PIN");
-                    communicator.onMuteDeafChange(0);
-                } else {
-                    communicator.logger.notice("Caller entered wrong PIN");
-                    param.statusCode = PJSIP_SC_SERVICE_UNAVAILABLE;
-                    this->hangup(param);
+
+        /*
+         * DTMF CALLER MENU
+         */
+
+        switch ( communicator.dtmf_mode ) {
+            case DTMF_MODE_UNAUTH:
+                /*
+                 * IF UNAUTH, the only thing we allow is to authorize.
+                 */
+                switch ( prm.digit[0] ) {
+                    case '#':
+                        /*
+                         * When user presses '#', test PIN entry
+                         */
+                        if ( communicator.caller_pin.length() > 0 ) {
+                            if ( communicator.got_dtmf == communicator.caller_pin ) {
+                                communicator.logger.notice("Caller entered correct PIN");
+                                communicator.dtmf_mode = DTMF_MODE_ROOT;
+                                this->playAudioFile(communicator.file_entering_channel);
+                                communicator.onMuteDeafChange(0);
+                                this->playAudioFile(communicator.file_announce_new_caller, true);
+                            } else {
+                                communicator.logger.notice("Caller entered wrong PIN");
+                                this->playAudioFile(communicator.file_invalid_pin);
+                                if ( communicator.pin_fails++ >= MAX_PIN_FAILS ) {
+                                param.statusCode = PJSIP_SC_SERVICE_UNAVAILABLE;
+                                    pj_thread_sleep(500); // pause before next announcement
+                                    this->playAudioFile(communicator.file_goodbye);
+                                    pj_thread_sleep(500); // pause before next announcement
+                                    this->hangup(param);
+                                }
+                                this->playAudioFile(communicator.file_prompt_pin);
+                            }
+                            communicator.got_dtmf = "";
+                        }
+                        break;
+                    case '*':
+                        /*
+                         * Allow user to reset PIN entry by pressing '*'
+                         */
+                        communicator.got_dtmf = "";
+                        this->playAudioFile(communicator.file_prompt_pin);
+                        break;
+                    default:
+                        /* 
+                         * In all other cases, add input digit to stack
+                         */
+                        communicator.got_dtmf = communicator.got_dtmf + prm.digit;
+                        if ( communicator.got_dtmf.size() > MAX_CALLER_PIN_LEN ) {
+                            // just drop 'em if too long
+                            param.statusCode = PJSIP_SC_SERVICE_UNAVAILABLE;
+                            this->playAudioFile(communicator.file_goodbye);
+                            pj_thread_sleep(500); // pause before next announcement
+                            this->hangup(param);
+                        }
                 }
-                communicator.got_dtmf = "";
-            } else {
-                // communicator.logger.notice("DTMF append %s to %s",
-                //         prm.digit.c_str(), communicator.got_dtmf.c_str());
-                communicator.got_dtmf = communicator.got_dtmf + prm.digit;
-            }
-        } else {
-            communicator.logger.notice("DTMF ignoring %s", prm.digit.c_str());
+                break;
+            case DTMF_MODE_ROOT:
+                /*
+                 * User already authenticated; no data entry pending
+                 */
+                switch ( prm.digit[0] ) {
+                    case '*':
+                        /*
+                         * Switch user to 'star' menu
+                         */
+                        communicator.dtmf_mode = DTMF_MODE_STAR;
+                        break;
+                    default:
+                        /*
+                         * Default is to ignore all digits in root
+                         */
+                        communicator.logger.notice("Ignore DTMF digit '%s' in ROOT state", prm.digit.c_str());
+                }
+                break;
+            case DTMF_MODE_STAR:
+                /*
+                 * User already entered '*'; time to perform action
+                 */
+                switch ( prm.digit[0] ) {
+                    /*
+                    case '5':
+                        // Mute line
+                        communicator.onMuteChange(1);
+                        this->playAudioFile(communicator.file_mute_on);
+                        break;
+                    case '6':
+                        // Un-mute line
+                        this->playAudioFile(communicator.file_mute_off);
+                        communicator.onMuteChange(0);
+                        break;
+                     */
+                    default:
+                        communicator.logger.notice("Unsupported DTMF digit '%s' in state STAR", prm.digit.c_str());
+                }
+                /*
+                 * In any case, switch back to root after one digit
+                 */
+                communicator.dtmf_mode = DTMF_MODE_ROOT;
+                break;
+            default:
+                communicator.logger.notice("Unexpected DTMF '%s' in unknown state '%d'", prm.digit.c_str(),
+                        communicator.dtmf_mode);
         }
+
     }
 
     void _Account::onRegState(pj::OnRegStateParam &prm) {

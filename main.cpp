@@ -98,9 +98,54 @@ int main(int argc, char *argv[]) {
 
     /* default to <no pin> */
     try {
-        pjsuaCommunicator.pin = conf.getString("mumble.pin");
+        pjsuaCommunicator.caller_pin = conf.getString("app.caller_pin");
     } catch (...) {
-        pjsuaCommunicator.pin = "";
+        pjsuaCommunicator.caller_pin = "";
+    }
+
+    try { pjsuaCommunicator.file_welcome = conf.getString("file.welcome");
+    } catch (...) {
+        pjsuaCommunicator.file_welcome = "welcome.wav";
+    }
+
+    try { pjsuaCommunicator.file_prompt_pin = conf.getString("file.prompt_pin");
+    } catch (...) {
+        pjsuaCommunicator.file_prompt_pin = "prompt-pin.wav";
+    }
+
+    try { pjsuaCommunicator.file_entering_channel = conf.getString("file.entering_channel");
+    } catch (...) {
+        pjsuaCommunicator.file_entering_channel = "entering-channel.wav";
+    }
+
+    try { pjsuaCommunicator.file_announce_new_caller = conf.getString("file.announce_new_caller");
+    } catch (...) {
+        pjsuaCommunicator.file_announce_new_caller = "announce-new-caller.wav";
+    }
+
+    try { pjsuaCommunicator.file_invalid_pin = conf.getString("file.invalid_pin");
+    } catch (...) {
+        pjsuaCommunicator.file_invalid_pin = "invalid-pin.wav";
+    }
+
+    try { pjsuaCommunicator.file_goodbye = conf.getString("file.goodbye");
+    } catch (...) {
+        pjsuaCommunicator.file_goodbye = "goodbye.wav";
+    }
+
+    try { pjsuaCommunicator.file_mute_on = conf.getString("file.mute_on");
+    } catch (...) {
+        pjsuaCommunicator.file_mute_on = "mute-on.wav";
+    }
+
+    try { pjsuaCommunicator.file_mute_off = conf.getString("file.mute_off");
+    } catch (...) {
+        pjsuaCommunicator.file_mute_off = "mute-off.wav";
+    }
+
+    try { pjsuaCommunicator.file_menu = conf.getString("file.menu");
+    } catch (...) {
+        pjsuaCommunicator.file_menu = "menu.wav";
     }
 
     mumbleCommunicator.connect(mumbleConf);

@@ -28,11 +28,28 @@ channelNameExpression =
 # in the same group
 autodeaf = 0
 
+# Bitrate of Opus encoder in B/s
+# Adjust it if you need to meet the specific bandwidth requirements of Murmur server
+opusEncoderBitrate = 16000
+
+[app]
+
 # Caller PIN needed to authenticate the phone call itself. The caller presses
 # the PIN, followed by the hash '#' key. On success, the caller is
 # unmuted/undeafened. On failure, the SIP call is hung up.
 pin = 4321
 
-# Bitrate of Opus encoder in B/s
-# Adjust it if you need to meet the specific bandwidth requirements of Murmur server
-opusEncoderBitrate = 16000
+[files]
+# These files are used for the caller and mumble channel audio clips.
+# The paths below assume that you are running ./mumsi in the build/ dir.
+welcome = ../media/welcome.wav
+prompt_pin = ../media/prompt-pin.wav
+entering_channel = ../media/entering-channel.wav
+announce_new_caller = ../media/announce-new-caller.wav
+invalid_pin = ../media/invalid-pin.wav
+goodbye = ../media/goodbye.wav
+mute_on = ../media/mute-on.wav
+mute_off = ../media/mute-off.wav
+menu = ../media/menu.wav
+
+

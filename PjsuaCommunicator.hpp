@@ -18,10 +18,14 @@
 #include <climits>
 #include <bits/unique_ptr.h>
 
+enum dtmf_modes_t {DTMF_MODE_UNAUTH, DTMF_MODE_ROOT, DTMF_MODE_STAR};
+
 namespace sip {
 
     constexpr int DEFAULT_PORT = 5060;
     constexpr int SAMPLING_RATE = 48000;
+    constexpr int MAX_CALLER_PIN_LEN = 64;
+    constexpr int MAX_PIN_FAILS = 2;
 
     class Exception : public std::runtime_error {
     public:
@@ -76,14 +80,30 @@ namespace sip {
                 int16_t *samples,
                 unsigned int length);
 
-        std::string pin;
+        // config params we get from config.ini
+        std::string caller_pin;
+        std::string file_welcome;
+        std::string file_prompt_pin;
+        std::string file_entering_channel;
+        std::string file_announce_new_caller;
+        std::string file_invalid_pin;
+        std::string file_goodbye;
+        std::string file_mute_on;
+        std::string file_mute_off;
+        std::string file_menu;
+
+        // TODO: move these to private?
         std::string got_dtmf;
+        dtmf_modes_t dtmf_mode = DTMF_MODE_ROOT;
+        int pin_fails = 0;
 
         std::function<void(int16_t *, int)> onIncomingPcmSamples;
 
         std::function<void(std::string)> onStateChange;
 
         std::function<void(int)> onMuteDeafChange;
+
+        std::function<void(int)> onMuteChange;
 
         pj_status_t mediaPortGetFrame(pjmedia_port *port, pjmedia_frame *frame);
 
