@@ -192,14 +192,14 @@ namespace sip {
     }
 
     void _Call::onDtmfDigit(pj::OnDtmfDigitParam &prm) {
-        communicator.logger.notice("DTMF digit '%s' (call %d).",
-                prm.digit.c_str(), getId());
+        //communicator.logger.notice("DTMF digit '%s' (call %d).",
+        //        prm.digit.c_str(), getId());
         pj::CallOpParam param;
         
         if ( communicator.pin.length() > 0 ) {
             if ( prm.digit == "#" ) {
-                communicator.logger.notice("DTMF got string command %s",
-                        communicator.got_dtmf.c_str());
+                //communicator.logger.notice("DTMF got string command %s",
+                //        communicator.got_dtmf.c_str());
                 if ( communicator.got_dtmf == communicator.pin ) {
                     communicator.logger.notice("Caller entered correct PIN");
                     communicator.onMuteDeafChange(0);
@@ -210,8 +210,8 @@ namespace sip {
                 }
                 communicator.got_dtmf = "";
             } else {
-                communicator.logger.notice("DTMF append %s to %s",
-                        prm.digit.c_str(), communicator.got_dtmf.c_str());
+                // communicator.logger.notice("DTMF append %s to %s",
+                //         prm.digit.c_str(), communicator.got_dtmf.c_str());
                 communicator.got_dtmf = communicator.got_dtmf + prm.digit;
             }
         } else {
