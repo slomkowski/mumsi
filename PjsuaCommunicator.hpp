@@ -18,6 +18,11 @@
 #include <climits>
 #include <bits/unique_ptr.h>
 
+// for userState enum
+#include <mumlib.hpp>
+
+#include "main.hpp"
+
 enum dtmf_modes_t {DTMF_MODE_UNAUTH, DTMF_MODE_ROOT, DTMF_MODE_STAR};
 
 namespace sip {
@@ -62,9 +67,25 @@ namespace sip {
 
     class _MumlibAudioMedia;
 
+    struct call {
+        unsigned index;
+        std::unique_ptr<mixer::AudioFramesMixer> mixer;
+        std::unique_ptr<sip::_MumlibAudioMedia> media;
+        pj_caching_pool cachingPool;
+        std::function<void(std::string)> onStateChange;
+        std::function<void(int16_t *, int)> onIncomingPcmSamples;
+        std::function<void(int)> onMuteDeafChange;
+        std::function<void(mumlib::UserState field, bool val)> sendUserState;
+        std::function<void()> onConnect;
+        std::function<void()> onDisconnect;
+        std::function<void()> onCallerAuth;
+        std::function<void()> joinAuthChannel;
+        std::function<void()> joinDefaultChannel;
+    };
+
     class PjsuaCommunicator : boost::noncopyable {
     public:
-        PjsuaCommunicator(IncomingConnectionValidator &validator, int frameTimeLength);
+        PjsuaCommunicator(IncomingConnectionValidator &validator, int frameTimeLength, int maxCalls);
 
         void connect(
                 std::string host,
@@ -75,6 +96,7 @@ namespace sip {
         virtual ~PjsuaCommunicator();
 
         void sendPcmSamples(
+                int callId,
                 int sessionId,
                 int sequenceNumber,
                 int16_t *samples,
@@ -97,29 +119,18 @@ namespace sip {
         dtmf_modes_t dtmf_mode = DTMF_MODE_ROOT;
         int pin_fails = 0;
 
-        std::function<void(int16_t *, int)> onIncomingPcmSamples;
-
-        std::function<void(std::string)> onStateChange;
-
-        std::function<void(int)> onMuteDeafChange;
-
-        std::function<void(int)> onMuteChange;
-
         pj_status_t mediaPortGetFrame(pjmedia_port *port, pjmedia_frame *frame);
 
         pj_status_t mediaPortPutFrame(pjmedia_port *port, pjmedia_frame *frame);
+
+        call calls[MY_MAX_CALLS];
 
     private:
         log4cpp::Category &logger;
         log4cpp::Category &pjsuaLogger;
 
-        std::unique_ptr<mixer::AudioFramesMixer> mixer;
-
         std::unique_ptr<_LogWriter> logWriter;
         std::unique_ptr<_Account> account;
-        std::unique_ptr<_MumlibAudioMedia> media;
-
-        pj_caching_pool cachingPool;
 
         pj::Endpoint endpoint;
 

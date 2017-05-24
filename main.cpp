@@ -10,6 +10,8 @@
 
 #include <execinfo.h>
 
+#include "main.hpp"
+
 /*
  * Code from http://stackoverflow.com/a/77336/5419223
  */
@@ -26,13 +28,15 @@ static void sigsegv_handler(int sig) {
 
 int main(int argc, char *argv[]) {
     signal(SIGSEGV, sigsegv_handler);
+    int max_calls;
 
     log4cpp::OstreamAppender appender("console", &std::cout);
     log4cpp::PatternLayout layout;
     layout.setConversionPattern("%d [%p] %c: %m%n");
     appender.setLayout(&layout);
     log4cpp::Category &logger = log4cpp::Category::getRoot();
-    logger.setPriority(log4cpp::Priority::NOTICE);
+    logger.setPriority(log4cpp::Priority::DEBUG);
+    //logger.setPriority(log4cpp::Priority::NOTICE);
     logger.addAppender(appender);
 
     if (argc == 1) {
@@ -48,40 +52,13 @@ int main(int argc, char *argv[]) {
 
     boost::asio::io_service ioService;
 
-    sip::PjsuaCommunicator pjsuaCommunicator(connectionValidator, conf.getInt("sip.frameLength"));
+    try {
+        max_calls = conf.getInt("sip.max_calls");
+    } catch (...) {
+        max_calls = 1;
+    }
 
-    mumble::MumbleCommunicator mumbleCommunicator(ioService);
-
-    mumble::MumbleChannelJoiner mumbleChannelJoiner(conf.getString("mumble.channelNameExpression"));
-
-    using namespace std::placeholders;
-    pjsuaCommunicator.onIncomingPcmSamples = std::bind(
-            &mumble::MumbleCommunicator::sendPcmSamples,
-            &mumbleCommunicator,
-            _1, _2);
-
-    pjsuaCommunicator.onStateChange = std::bind(
-            &mumble::MumbleCommunicator::sendTextMessage,
-            &mumbleCommunicator, _1);
-
-    pjsuaCommunicator.onMuteDeafChange = std::bind(
-            &mumble::MumbleCommunicator::mutedeaf,
-            &mumbleCommunicator, _1);
-
-    mumbleCommunicator.onIncomingPcmSamples = std::bind(
-            &sip::PjsuaCommunicator::sendPcmSamples,
-            &pjsuaCommunicator,
-            _1, _2, _3, _4);
-
-    mumbleCommunicator.onIncomingChannelState = std::bind(
-            &mumble::MumbleChannelJoiner::checkChannel,
-            &mumbleChannelJoiner,
-            _1, _2);
-
-    mumbleCommunicator.onServerSync = std::bind(
-            &mumble::MumbleChannelJoiner::maybeJoinChannel,
-            &mumbleChannelJoiner,
-            &mumbleCommunicator);
+    sip::PjsuaCommunicator pjsuaCommunicator(connectionValidator, conf.getInt("sip.frameLength"), max_calls);
 
     mumble::MumbleCommunicatorConfig mumbleConf;
     mumbleConf.host = conf.getString("mumble.host");
@@ -94,6 +71,18 @@ int main(int argc, char *argv[]) {
         mumbleConf.autodeaf = conf.getBool("mumble.autodeaf");
     } catch (...) {
         mumbleConf.autodeaf = false;
+    }
+
+    try {
+        mumbleConf.comment = conf.getString("app.comment");
+    } catch (...) {
+        mumbleConf.comment = "";
+    }
+
+    try {
+        mumbleConf.authchan = conf.getString("mumble.channelAuthExpression");
+    } catch (...) {
+        mumbleConf.authchan = "";
     }
 
     /* default to <no pin> */
@@ -148,7 +137,111 @@ int main(int argc, char *argv[]) {
         pjsuaCommunicator.file_menu = "menu.wav";
     }
 
-    mumbleCommunicator.connect(mumbleConf);
+    /* If the channelUnauthExpression is set, use this as the default
+     * channel and use channelNameExpression for the authchan. Otherwise,
+     * use the channelNameExpression for the default.
+     */
+    std::string defaultChan = conf.getString("mumble.channelNameExpression"); 
+    std::string authChan = "";
+
+    if ( pjsuaCommunicator.caller_pin.size() > 0 ) {
+        try {
+            authChan = conf.getString("mumble.channelAuthExpression");
+        } catch (...) {
+        //    defaultChan = conf.getString("mumble.channelNameExpression"); 
+        }
+    }
+
+    mumble::MumbleChannelJoiner mumbleChannelJoiner(defaultChan);
+    mumble::MumbleChannelJoiner mumbleAuthChannelJoiner(authChan);
+
+    for (int i = 0; i<max_calls; i++) {
+
+        auto *mumcom = new mumble::MumbleCommunicator(ioService);
+        mumcom->callId = i;
+
+        using namespace std::placeholders;
+        // Passing audio input from SIP to Mumble
+        pjsuaCommunicator.calls[i].onIncomingPcmSamples = std::bind(
+                &mumble::MumbleCommunicator::sendPcmSamples,
+                mumcom,
+                _1, _2);
+
+        // PJ sends text message to Mumble
+        pjsuaCommunicator.calls[i].onStateChange = std::bind(
+                &mumble::MumbleCommunicator::sendTextMessage,
+                mumcom,
+                _1);
+
+        /*
+        // Send mute/deaf to Mumble
+        pjsuaCommunicator.calls[i].onMuteDeafChange = std::bind(
+                &mumble::MumbleCommunicator::mutedeaf,
+                mumcom,
+                _1);
+         */
+
+        // Send UserState to Mumble
+        pjsuaCommunicator.calls[i].sendUserState = std::bind(
+                &mumble::MumbleCommunicator::sendUserState,
+                mumcom,
+                _1, _2);
+
+        // PJ triggers Mumble connect
+        pjsuaCommunicator.calls[i].onConnect = std::bind(
+                &mumble::MumbleCommunicator::onConnect,
+                mumcom);
+
+        // PJ triggers Mumble disconnect
+        pjsuaCommunicator.calls[i].onDisconnect = std::bind(
+                &mumble::MumbleCommunicator::onDisconnect,
+                mumcom);
+
+        // PJ notifies Mumble that Caller Auth is done
+        pjsuaCommunicator.calls[i].onCallerAuth = std::bind(
+                &mumble::MumbleCommunicator::onCallerAuth,
+                mumcom);
+
+        /*
+        // PJ notifies Mumble that Caller Auth is done
+        pjsuaCommunicator.calls[i].onCallerUnauth = std::bind(
+                &mumble::MumbleCommunicator::onCallerUnauth,
+                mumcom);
+                */
+
+        // PJ notifies Mumble that Caller Auth is done
+        pjsuaCommunicator.calls[i].joinDefaultChannel = std::bind(
+                &mumble::MumbleChannelJoiner::findJoinChannel,
+                &mumbleChannelJoiner,
+                mumcom);
+
+        // PJ notifies Mumble that Caller Auth is done
+        pjsuaCommunicator.calls[i].joinAuthChannel = std::bind(
+                &mumble::MumbleChannelJoiner::findJoinChannel,
+                &mumbleAuthChannelJoiner,
+                mumcom);
+
+        // Passing audio from Mumble to SIP
+        mumcom->onIncomingPcmSamples = std::bind(
+                &sip::PjsuaCommunicator::sendPcmSamples,
+                &pjsuaCommunicator,
+                _1, _2, _3, _4, _5);
+
+        // Handle Channel State messages from Mumble
+        mumcom->onIncomingChannelState = std::bind(
+                &mumble::MumbleChannelJoiner::checkChannel,
+                &mumbleChannelJoiner,
+                _1, _2);
+
+        // Handle Server Sync message from Mumble
+        mumcom->onServerSync = std::bind(
+                &mumble::MumbleChannelJoiner::maybeJoinChannel,
+                &mumbleChannelJoiner,
+                mumcom);
+
+        mumbleConf.user = conf.getString("mumble.user") + '-' + std::to_string(i);
+        mumcom->connect(mumbleConf);
+    }
 
     pjsuaCommunicator.connect(
             conf.getString("sip.host"),

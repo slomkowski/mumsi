@@ -8,6 +8,9 @@
 #include <string>
 #include <stdexcept>
 
+// 0 = mumble users connected at start; 1 = connect at dial-in
+// TODO: fix mumlib::TransportException when this option is enabled
+#define MUM_DELAYED_CONNECT 0
 
 namespace mumble {
 
@@ -26,6 +29,20 @@ namespace mumble {
         int opusEncoderBitrate;
         int port = 0;
         bool autodeaf;
+        std::string comment;
+        int max_calls = 1;
+        std::string authchan; // config.ini: channelAuthExpression
+    };
+
+    // This is the subset that is of interest to us
+    struct MumbleUserState {
+        int32_t mute;
+        int32_t deaf;
+        int32_t suppress;
+        int32_t self_mute;
+        int32_t self_deaf;
+        int32_t priority_speaker;
+        int32_t recording;
     };
 
     class MumbleCommunicator : boost::noncopyable {
@@ -34,6 +51,10 @@ namespace mumble {
                 boost::asio::io_service &ioService);
 
         void connect(MumbleCommunicatorConfig &config);
+        void onConnect();
+        void onDisconnect();
+        void onCallerAuth();
+        //void onCallerUnauth();
 
         virtual ~MumbleCommunicator();
 
@@ -41,9 +62,9 @@ namespace mumble {
 
         /**
          * This callback is called when communicator has received samples.
-         * Arguments: session ID, sequence number, PCM samples, length of samples
+         * Arguments: call ID, session ID, sequence number, PCM samples, length of samples
          */
-        std::function<void(int, int, int16_t *, int)> onIncomingPcmSamples;
+        std::function<void(int, int, int, int16_t *, int)> onIncomingPcmSamples;
 
         /**
          * This callback is called when a channel state message (e.g. Channel
@@ -53,11 +74,17 @@ namespace mumble {
 
         std::function<void()> onServerSync;
 
+        std::function<void()> onUserState;
+
         void sendTextMessage(std::string message);
 
         void joinChannel(int channel_id);
 
-        void mutedeaf(int status);
+        void sendUserState(mumlib::UserState field, bool val);
+
+        MumbleUserState userState;
+
+        int callId;
 
     private:
         boost::asio::io_service &ioService;
