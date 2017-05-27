@@ -162,7 +162,6 @@ namespace sip {
 
             communicator.got_dtmf = "";
 
-            communicator.logger.notice("MYDEBUG: pin length=%d", communicator.caller_pin.length());
             /* 
              * if no pin is set, go ahead and turn off mute/deaf
              * otherwise, wait for pin to be entered
@@ -177,10 +176,8 @@ namespace sip {
             } else {
                 // PIN set... enter DTMF unauth menu and play PIN prompt message
                 communicator.dtmf_mode = DTMF_MODE_UNAUTH;
-                communicator.logger.notice("MYDEBUG: call joinDefaultChannel()");
                 communicator.calls[ci.id].joinDefaultChannel();
                 pj_thread_sleep(500); // pause briefly after announcement
-                communicator.logger.notice("MYDEBUG: call play...()");
 
                 this->playAudioFile(communicator.file_prompt_pin);
             }
@@ -197,7 +194,6 @@ namespace sip {
                 communicator.calls[ci.id].sendUserStateStr(mumlib::UserState::COMMENT, msgText);
                 communicator.calls[ci.id].onStateChange(msgText);
                 communicator.calls[ci.id].sendUserState(mumlib::UserState::SELF_DEAF, true);
-                communicator.logger.notice("MYDEBUG: call joinDefaultChannel()");
                 communicator.calls[ci.id].joinDefaultChannel();
 
                 communicator.calls[ci.id].onDisconnect();
@@ -207,7 +203,7 @@ namespace sip {
 
             delete this;
         } else {
-            communicator.logger.notice("MYDEBUG: onCallState() call:%d state:%d",
+            communicator.logger.notice("MYDEBUG: unexpected state in onCallState() call:%d state:%d",
                     ci.id, ci.state);
         }
     }
@@ -237,7 +233,7 @@ namespace sip {
      * - local deafen before playing and undeafen after?
      */
     void _Call::playAudioFile(std::string file, bool in_chan) {
-        communicator.logger.notice("Entered playAudioFile(%s)", file.c_str());
+        communicator.logger.info("Entered playAudioFile(%s)", file.c_str());
         pj::AudioMediaPlayer player;
         pj::MediaFormatAudio mfa;
         pj::AudioMediaPlayerInfo pinfo;
@@ -314,7 +310,7 @@ namespace sip {
                          */
                         if ( communicator.caller_pin.length() > 0 ) {
                             if ( communicator.got_dtmf == communicator.caller_pin ) {
-                                communicator.logger.notice("Caller entered correct PIN");
+                                communicator.logger.info("Caller entered correct PIN");
                                 communicator.dtmf_mode = DTMF_MODE_ROOT;
                                 communicator.calls[ci.id].joinAuthChannel();
 
@@ -322,7 +318,7 @@ namespace sip {
                                 communicator.calls[ci.id].sendUserState(mumlib::UserState::SELF_MUTE, false);
                                 this->playAudioFile(communicator.file_announce_new_caller, true);
                             } else {
-                                communicator.logger.notice("Caller entered wrong PIN");
+                                communicator.logger.info("Caller entered wrong PIN");
                                 this->playAudioFile(communicator.file_invalid_pin);
                                 if ( communicator.pin_fails++ >= MAX_PIN_FAILS ) {
                                 param.statusCode = PJSIP_SC_SERVICE_UNAVAILABLE;
@@ -372,7 +368,7 @@ namespace sip {
                         /*
                          * Default is to ignore all digits in root
                          */
-                        communicator.logger.notice("Ignore DTMF digit '%s' in ROOT state", prm.digit.c_str());
+                        communicator.logger.info("Ignore DTMF digit '%s' in ROOT state", prm.digit.c_str());
                 }
                 break;
             case DTMF_MODE_STAR:
@@ -395,7 +391,7 @@ namespace sip {
                         this->playAudioFile(communicator.file_menu);
                         break;
                     default:
-                        communicator.logger.notice("Unsupported DTMF digit '%s' in state STAR", prm.digit.c_str());
+                        communicator.logger.info("Unsupported DTMF digit '%s' in state STAR", prm.digit.c_str());
                 }
                 /*
                  * In any case, switch back to root after one digit
@@ -403,7 +399,7 @@ namespace sip {
                 communicator.dtmf_mode = DTMF_MODE_ROOT;
                 break;
             default:
-                communicator.logger.notice("Unexpected DTMF '%s' in unknown state '%d'", prm.digit.c_str(),
+                communicator.logger.info("Unexpected DTMF '%s' in unknown state '%d'", prm.digit.c_str(),
                         communicator.dtmf_mode);
         }
 
