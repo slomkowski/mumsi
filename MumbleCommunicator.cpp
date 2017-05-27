@@ -168,3 +168,7 @@ void mumble::MumbleCommunicator::sendUserState(mumlib::UserState field, bool val
     mum->sendUserState(field, val);
 }
 
+void mumble::MumbleCommunicator::sendUserState(mumlib::UserState field, std::string val) {
+    mum->sendUserState(field, val);
+}
+

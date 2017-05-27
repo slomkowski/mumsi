@@ -76,6 +76,7 @@ namespace sip {
         std::function<void(int16_t *, int)> onIncomingPcmSamples;
         std::function<void(int)> onMuteDeafChange;
         std::function<void(mumlib::UserState field, bool val)> sendUserState;
+        std::function<void(mumlib::UserState field, std::string val)> sendUserStateStr;
         std::function<void()> onConnect;
         std::function<void()> onDisconnect;
         std::function<void()> onCallerAuth;

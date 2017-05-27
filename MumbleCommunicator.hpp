@@ -82,6 +82,8 @@ namespace mumble {
 
         void sendUserState(mumlib::UserState field, bool val);
 
+        void sendUserState(mumlib::UserState field, std::string val);
+
         MumbleUserState userState;
 
         int callId;

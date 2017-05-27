@@ -154,6 +154,7 @@ namespace sip {
             pj_thread_sleep(500); // sleep a moment to allow connection to stabilize
 
             communicator.logger.notice(msgText);
+            communicator.calls[ci.id].sendUserStateStr(mumlib::UserState::COMMENT, msgText);
             communicator.calls[ci.id].onStateChange(msgText);
 
             pj_thread_sleep(500); // sleep a moment to allow connection to stabilize
@@ -193,6 +194,7 @@ namespace sip {
                 communicator.calls[ci.id].mixer->clear();
 
                 communicator.logger.notice(msgText);
+                communicator.calls[ci.id].sendUserStateStr(mumlib::UserState::COMMENT, msgText);
                 communicator.calls[ci.id].onStateChange(msgText);
                 communicator.calls[ci.id].sendUserState(mumlib::UserState::SELF_DEAF, true);
                 communicator.logger.notice("MYDEBUG: call joinDefaultChannel()");

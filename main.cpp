@@ -183,7 +183,15 @@ int main(int argc, char *argv[]) {
 
         // Send UserState to Mumble
         pjsuaCommunicator.calls[i].sendUserState = std::bind(
-                &mumble::MumbleCommunicator::sendUserState,
+                static_cast<void(mumble::MumbleCommunicator::*)(mumlib::UserState, bool)>
+                (&mumble::MumbleCommunicator::sendUserState),
+                mumcom,
+                _1, _2);
+
+        // Send UserState to Mumble
+        pjsuaCommunicator.calls[i].sendUserStateStr = std::bind(
+                static_cast<void(mumble::MumbleCommunicator::*)(mumlib::UserState, std::string)>
+                (&mumble::MumbleCommunicator::sendUserState),
                 mumcom,
                 _1, _2);
 
