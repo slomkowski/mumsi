@@ -121,8 +121,8 @@ namespace sip {
 
     class _Account : public pj::Account {
     public:
-        _Account(sip::PjsuaCommunicator &comm)
-                : communicator(comm) { }
+        _Account(sip::PjsuaCommunicator &comm, int max_calls)
+                : communicator(comm) { this->max_calls = max_calls; }
 
         virtual void onRegState(pj::OnRegStateParam &prm) override;
 
@@ -131,7 +131,8 @@ namespace sip {
     private:
         sip::PjsuaCommunicator &communicator;
 
-        bool available = true;
+        int active_calls = 0;
+        int max_calls;
 
         friend class _Call;
     };
@@ -166,7 +167,7 @@ namespace sip {
              * if no pin is set, go ahead and turn off mute/deaf
              * otherwise, wait for pin to be entered
              */
-            if ( communicator.caller_pin.length() == 0 ) {
+            if ( communicator.pins.size() == 0 ) {
                 // No PIN set... enter DTMF root menu and turn off mute/deaf
                 communicator.dtmf_mode = DTMF_MODE_ROOT;
                 // turning off mute automatically turns off deaf
@@ -185,7 +186,11 @@ namespace sip {
         } else if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
             auto &acc = dynamic_cast<_Account &>(account);
 
-            if (not acc.available) {
+            /*
+             * Not sure why we check acc.available, but with multi-call
+             * functionality, this check doesn't work.
+             */
+            //if (not acc.available) {
                 auto msgText = "Call from " + address + " finished.";
 
                 communicator.calls[ci.id].mixer->clear();
@@ -198,8 +203,9 @@ namespace sip {
 
                 communicator.calls[ci.id].onDisconnect();
 
-                acc.available = true;
-            }
+                //acc.available = true;
+                acc.active_calls--;
+            //}
 
             delete this;
         } else {
@@ -221,7 +227,7 @@ namespace sip {
             communicator.calls[ci.id].media->startTransmit(*aud_med);
             aud_med->startTransmit(*communicator.calls[ci.id].media);
         } else if (ci.media[0].status == PJSUA_CALL_MEDIA_NONE) {
-            dynamic_cast<_Account &>(account).available = true;
+            dynamic_cast<_Account &>(account).active_calls++;
         }
     }
 
@@ -293,6 +299,7 @@ namespace sip {
         pj::CallOpParam param;
 
         auto ci = getInfo();
+        std::string chanName;
 
         /*
          * DTMF CALLER MENU
@@ -308,11 +315,15 @@ namespace sip {
                         /*
                          * When user presses '#', test PIN entry
                          */
-                        if ( communicator.caller_pin.length() > 0 ) {
-                            if ( communicator.got_dtmf == communicator.caller_pin ) {
+                        if ( communicator.pins.size() > 0 ) {
+                            if ( communicator.pins.count(communicator.got_dtmf) > 0 ) {
                                 communicator.logger.info("Caller entered correct PIN");
                                 communicator.dtmf_mode = DTMF_MODE_ROOT;
-                                communicator.calls[ci.id].joinAuthChannel();
+                                communicator.logger.notice("MYDEBUG: %s:%s",
+                                        communicator.got_dtmf.c_str(),
+                                        communicator.pins[communicator.got_dtmf].c_str());
+                                communicator.calls[ci.id].joinOtherChannel(
+                                        communicator.pins[communicator.got_dtmf]);
 
                                 this->playAudioFile(communicator.file_entering_channel);
                                 communicator.calls[ci.id].sendUserState(mumlib::UserState::SELF_MUTE, false);
@@ -386,12 +397,23 @@ namespace sip {
                         this->playAudioFile(communicator.file_mute_off);
                         communicator.calls[ci.id].sendUserState(mumlib::UserState::SELF_MUTE, false);
                         break;
-                    case '0':
+                    case '9':
+                        if ( communicator.pins.size() > 0 ) {
+                            communicator.dtmf_mode = DTMF_MODE_UNAUTH;
+                            communicator.calls[ci.id].sendUserState(mumlib::UserState::SELF_DEAF, true);
+                            communicator.calls[ci.id].joinDefaultChannel();
+                            this->playAudioFile(communicator.file_prompt_pin);
+                        } else {
+                            // we should have a 'not supported' message
+                        }
+                        break;
+                    case '0': // block these for the menu itself
+                    case '*':
+                    default:
                         // play menu
+                        communicator.logger.info("Unsupported DTMF digit '%s' in state STAR", prm.digit.c_str());
                         this->playAudioFile(communicator.file_menu);
                         break;
-                    default:
-                        communicator.logger.info("Unsupported DTMF digit '%s' in state STAR", prm.digit.c_str());
                 }
                 /*
                  * In any case, switch back to root after one digit
@@ -422,17 +444,13 @@ namespace sip {
 
         if (communicator.uriValidator.validateUri(uri)) {
 
-            if (available) {
+            if (active_calls < max_calls) {
                 param.statusCode = PJSIP_SC_OK;
-                available = false;
+                active_calls++;
             } else {
-                /*
-                 * EXPERIMENT WITH MULTI-LINE
-                 */
-                communicator.logger.info("MULTI-LINE Incoming call from %s.", uri.c_str());
+                communicator.logger.notice("BUSY - reject incoming call from %s.", uri.c_str());
                 param.statusCode = PJSIP_SC_OK;
-                available = false;
-                //param.statusCode = PJSIP_SC_BUSY_EVERYWHERE;
+                param.statusCode = PJSIP_SC_BUSY_EVERYWHERE;
             }
 
             call->answer(param);
@@ -450,6 +468,7 @@ sip::PjsuaCommunicator::PjsuaCommunicator(IncomingConnectionValidator &validator
           uriValidator(validator) {
 
     logWriter.reset(new sip::_LogWriter(pjsuaLogger));
+    max_calls = maxCalls;
 
 
     endpoint.libCreate();
@@ -551,7 +570,7 @@ void sip::PjsuaCommunicator::registerAccount(string host, string user, string pa
     accountConfig.sipConfig.authCreds.push_back(cred);
 
     logger.info("Registering account for URI: %s.", uri.c_str());
-    account.reset(new _Account(*this));
+    account.reset(new _Account(*this, max_calls));
     account->create(accountConfig);
 }
 

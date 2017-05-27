@@ -50,3 +50,9 @@ void mumble::MumbleChannelJoiner::findJoinChannel(mumble::MumbleCommunicator *mc
 	}
 }
 
+void mumble::MumbleChannelJoiner::joinOtherChannel(mumble::MumbleCommunicator *mc, std::string channelNameRegex) {
+    this->channelNameRegex = boost::regex(channelNameRegex);
+    findJoinChannel(mc);
+}
+
+

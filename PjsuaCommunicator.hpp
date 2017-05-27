@@ -80,7 +80,8 @@ namespace sip {
         std::function<void()> onConnect;
         std::function<void()> onDisconnect;
         std::function<void()> onCallerAuth;
-        std::function<void()> joinAuthChannel;
+        std::function<void()> joinAuthChannel; // DEPRECATE ?
+        std::function<void(std::string channelNameRegex)> joinOtherChannel;
         std::function<void()> joinDefaultChannel;
     };
 
@@ -114,6 +115,7 @@ namespace sip {
         std::string file_mute_on;
         std::string file_mute_off;
         std::string file_menu;
+        int max_calls;
 
         // TODO: move these to private?
         std::string got_dtmf;
@@ -125,6 +127,8 @@ namespace sip {
         pj_status_t mediaPortPutFrame(pjmedia_port *port, pjmedia_frame *frame);
 
         call calls[MY_MAX_CALLS];
+
+        std::unordered_map<std::string, std::string> pins;
 
     private:
         log4cpp::Category &logger;

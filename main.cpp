@@ -60,6 +60,11 @@ int main(int argc, char *argv[]) {
 
     sip::PjsuaCommunicator pjsuaCommunicator(connectionValidator, conf.getInt("sip.frameLength"), max_calls);
 
+    try {
+        pjsuaCommunicator.pins = conf.getChildren("pins");
+    } catch (...) {
+    }
+
     mumble::MumbleCommunicatorConfig mumbleConf;
     mumbleConf.host = conf.getString("mumble.host");
     mumbleConf.port = conf.getInt("mumble.port");
@@ -77,19 +82,6 @@ int main(int argc, char *argv[]) {
         mumbleConf.comment = conf.getString("app.comment");
     } catch (...) {
         mumbleConf.comment = "";
-    }
-
-    try {
-        mumbleConf.authchan = conf.getString("mumble.channelAuthExpression");
-    } catch (...) {
-        mumbleConf.authchan = "";
-    }
-
-    /* default to <no pin> */
-    try {
-        pjsuaCommunicator.caller_pin = conf.getString("app.caller_pin");
-    } catch (...) {
-        pjsuaCommunicator.caller_pin = "";
     }
 
     try { pjsuaCommunicator.file_welcome = conf.getString("files.welcome");
@@ -137,23 +129,10 @@ int main(int argc, char *argv[]) {
         pjsuaCommunicator.file_menu = "menu.wav";
     }
 
-    /* If the channelUnauthExpression is set, use this as the default
-     * channel and use channelNameExpression for the authchan. Otherwise,
-     * use the channelNameExpression for the default.
-     */
     std::string defaultChan = conf.getString("mumble.channelNameExpression"); 
-    std::string authChan = "";
-
-    if ( pjsuaCommunicator.caller_pin.size() > 0 ) {
-        try {
-            authChan = conf.getString("mumble.channelAuthExpression");
-        } catch (...) {
-        //    defaultChan = conf.getString("mumble.channelNameExpression"); 
-        }
-    }
 
     mumble::MumbleChannelJoiner mumbleChannelJoiner(defaultChan);
-    mumble::MumbleChannelJoiner mumbleAuthChannelJoiner(authChan);
+    mumble::MumbleChannelJoiner mumbleOtherChannelJoiner(defaultChan);
 
     for (int i = 0; i<max_calls; i++) {
 
@@ -223,11 +202,12 @@ int main(int argc, char *argv[]) {
                 &mumbleChannelJoiner,
                 mumcom);
 
-        // PJ notifies Mumble that Caller Auth is done
-        pjsuaCommunicator.calls[i].joinAuthChannel = std::bind(
-                &mumble::MumbleChannelJoiner::findJoinChannel,
-                &mumbleAuthChannelJoiner,
-                mumcom);
+        // PJ notifies Mumble to join other channel
+        pjsuaCommunicator.calls[i].joinOtherChannel = std::bind(
+                &mumble::MumbleChannelJoiner::joinOtherChannel,
+                &mumbleOtherChannelJoiner,
+                mumcom,
+                _1);
 
         // Passing audio from Mumble to SIP
         mumcom->onIncomingPcmSamples = std::bind(

@@ -3,6 +3,7 @@
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/ini_parser.hpp>
 #include <boost/format.hpp>
+#include <boost/foreach.hpp>
 
 using namespace config;
 
@@ -48,6 +49,17 @@ bool config::Configuration::getBool(const std::string &property) {
 
 std::string config::Configuration::getString(const std::string &property) {
     return get<std::string>(impl->ptree, property);
+}
+
+// TODO: return set
+std::unordered_map<std::string, std::string> config::Configuration::getChildren(const std::string &property) {
+    std::unordered_map<std::string, std::string> pins;
+    BOOST_FOREACH(boost::property_tree::ptree::value_type &v,
+            impl->ptree.get_child(property)) {
+        //pins[v.first.data()] = get<std::string>(impl->ptree, property + "." + v.second.data());
+        pins[v.first.data()] = v.second.data();
+    }
+    return pins;
 }
 
 
