@@ -16,6 +16,10 @@ password = foobar
 # Adjust it if you need to meet the specific bandwidth requirements of Murmur server
 frameLength = 40
 
+# Set the maximum number of SIP calls to allow simultaneously. This should be <= 32.
+# If you need more, recompile PJSUA LIB and also modify the define in main.hpp.
+max_calls = 1
+
 [mumble]
 host = example.org
 port = 64738
