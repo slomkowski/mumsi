@@ -92,47 +92,47 @@ int main(int argc, char *argv[]) {
         pjsuaCommunicator.caller_pin = "";
     }
 
-    try { pjsuaCommunicator.file_welcome = conf.getString("file.welcome");
+    try { pjsuaCommunicator.file_welcome = conf.getString("files.welcome");
     } catch (...) {
         pjsuaCommunicator.file_welcome = "welcome.wav";
     }
 
-    try { pjsuaCommunicator.file_prompt_pin = conf.getString("file.prompt_pin");
+    try { pjsuaCommunicator.file_prompt_pin = conf.getString("files.prompt_pin");
     } catch (...) {
         pjsuaCommunicator.file_prompt_pin = "prompt-pin.wav";
     }
 
-    try { pjsuaCommunicator.file_entering_channel = conf.getString("file.entering_channel");
+    try { pjsuaCommunicator.file_entering_channel = conf.getString("files.entering_channel");
     } catch (...) {
         pjsuaCommunicator.file_entering_channel = "entering-channel.wav";
     }
 
-    try { pjsuaCommunicator.file_announce_new_caller = conf.getString("file.announce_new_caller");
+    try { pjsuaCommunicator.file_announce_new_caller = conf.getString("files.announce_new_caller");
     } catch (...) {
         pjsuaCommunicator.file_announce_new_caller = "announce-new-caller.wav";
     }
 
-    try { pjsuaCommunicator.file_invalid_pin = conf.getString("file.invalid_pin");
+    try { pjsuaCommunicator.file_invalid_pin = conf.getString("files.invalid_pin");
     } catch (...) {
         pjsuaCommunicator.file_invalid_pin = "invalid-pin.wav";
     }
 
-    try { pjsuaCommunicator.file_goodbye = conf.getString("file.goodbye");
+    try { pjsuaCommunicator.file_goodbye = conf.getString("files.goodbye");
     } catch (...) {
         pjsuaCommunicator.file_goodbye = "goodbye.wav";
     }
 
-    try { pjsuaCommunicator.file_mute_on = conf.getString("file.mute_on");
+    try { pjsuaCommunicator.file_mute_on = conf.getString("files.mute_on");
     } catch (...) {
         pjsuaCommunicator.file_mute_on = "mute-on.wav";
     }
 
-    try { pjsuaCommunicator.file_mute_off = conf.getString("file.mute_off");
+    try { pjsuaCommunicator.file_mute_off = conf.getString("files.mute_off");
     } catch (...) {
         pjsuaCommunicator.file_mute_off = "mute-off.wav";
     }
 
-    try { pjsuaCommunicator.file_menu = conf.getString("file.menu");
+    try { pjsuaCommunicator.file_menu = conf.getString("files.menu");
     } catch (...) {
         pjsuaCommunicator.file_menu = "menu.wav";
     }
