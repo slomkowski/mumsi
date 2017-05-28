@@ -269,7 +269,7 @@ namespace sip {
             try {
                 player.createPlayer(file, PJMEDIA_FILE_NO_LOOP);
                 pinfo = player.getInfo();
-                sleeptime = pinfo.sizeBytes / (pinfo.payloadBitsPerSample * 3);
+                sleeptime = (pinfo.sizeBytes / (pinfo.payloadBitsPerSample * 2.75));
 
                 if ( in_chan ) { // choose the target sound output
                     player.startTransmit(*communicator.calls[ci.id].media);
