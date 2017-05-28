@@ -228,6 +228,14 @@ int main(int argc, char *argv[]) {
                 mumcom);
 
         mumbleConf.user = conf.getString("mumble.user") + '-' + std::to_string(i);
+        try {
+            if ( conf.getBool("mumble.use_certs") ) {
+                mumbleConf.cert_file = mumbleConf.user + "-cert.pem";
+                mumbleConf.privkey_file = mumbleConf.user + "-key.pem";
+            }
+        } catch (...) {
+            logger.info("Client certs not enabled in config");
+        }
         mumcom->connect(mumbleConf);
     }
 

@@ -76,6 +76,8 @@ void mumble::MumbleCommunicator::connect(MumbleCommunicatorConfig &config) {
 
     mumConfig = mumlib::MumlibConfiguration();
     mumConfig.opusEncoderBitrate = config.opusEncoderBitrate;
+    mumConfig.cert_file = config.cert_file;
+    mumConfig.privkey_file = config.privkey_file;
 
     mum.reset(new mumlib::Mumlib(*callback, ioService, mumConfig));
     callback->communicator = this;

@@ -26,6 +26,8 @@ namespace mumble {
         std::string user;
         std::string password;
         std::string host;
+        std::string cert_file;
+        std::string privkey_file;
         int opusEncoderBitrate;
         int port = 0;
         bool autodeaf;
