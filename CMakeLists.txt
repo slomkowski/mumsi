@@ -7,7 +7,7 @@ INCLUDE(FindPkgConfig)
 find_package(Boost COMPONENTS system regex REQUIRED)
 find_package(PkgConfig REQUIRED)
 
-pkg_check_modules(PJSIP "libpjproject")
+pkg_check_modules(PJSIP>=2.6 "libpjproject")
 pkg_check_modules(LOG4CPP "log4cpp")
 
 add_definitions(${PJSIP_CFLAGS})
