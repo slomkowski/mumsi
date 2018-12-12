@@ -1,3 +1,5 @@
+**I do not maintain this project and [mumlib](https://github.com/slomkowski/mumlib) any longer, but some new features and bugfixes have been implemented in the [forks](https://github.com/slomkowski/mumsi/network). Check them out!**
+
 # *mumsi* - SIP to Mumble gateway
 
 SIP to Mumble gateway based on PJSIP stack and *mumlib* library. It registers to SIP registrar and listens for incoming
