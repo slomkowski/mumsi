@@ -6,6 +6,8 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
 
+#include "main.hpp"
+
 using namespace std;
 
 namespace sip {
@@ -38,9 +40,9 @@ namespace sip {
 
     class _MumlibAudioMedia : public pj::AudioMedia {
     public:
-        _MumlibAudioMedia(sip::PjsuaCommunicator &comm, int frameTimeLength)
+        _MumlibAudioMedia(int call_id, sip::PjsuaCommunicator &comm, int frameTimeLength)
                 : communicator(comm) {
-            createMediaPort(frameTimeLength);
+            createMediaPort(call_id, frameTimeLength);
             registerMediaPort(&mediaPort);
         }
 
@@ -62,7 +64,7 @@ namespace sip {
             return communicator->mediaPortPutFrame(port, frame);
         }
 
-        void createMediaPort(int frameTimeLength) {
+        void createMediaPort(int call_id, int frameTimeLength) {
 
             auto name = pj_str((char *) "MumsiMediaPort");
 
@@ -88,6 +90,8 @@ namespace sip {
             }
 
             mediaPort.port_data.pdata = &communicator;
+            // track call id in port_data
+            mediaPort.port_data.ldata = (long) call_id;
 
             mediaPort.get_frame = &callback_getFrame;
             mediaPort.put_frame = &callback_putFrame;
@@ -107,6 +111,9 @@ namespace sip {
 
         virtual void onDtmfDigit(pj::OnDtmfDigitParam &prm) override;
 
+        virtual void playAudioFile(std::string file);
+        virtual void playAudioFile(std::string file, bool in_chan);
+
     private:
         sip::PjsuaCommunicator &communicator;
         pj::Account &account;
@@ -114,8 +121,8 @@ namespace sip {
 
     class _Account : public pj::Account {
     public:
-        _Account(sip::PjsuaCommunicator &comm)
-                : communicator(comm) { }
+        _Account(sip::PjsuaCommunicator &comm, int max_calls)
+                : communicator(comm) { this->max_calls = max_calls; }
 
         virtual void onRegState(pj::OnRegStateParam &prm) override;
 
@@ -124,7 +131,8 @@ namespace sip {
     private:
         sip::PjsuaCommunicator &communicator;
 
-        bool available = true;
+        int active_calls = 0;
+        int max_calls;
 
         friend class _Call;
     };
@@ -142,23 +150,67 @@ namespace sip {
         if (ci.state == PJSIP_INV_STATE_CONFIRMED) {
             auto msgText = "Incoming call from " + address + ".";
 
+            // first, login to Mumble (only matters if MUM_DELAYED_CONNECT)
+            communicator.calls[ci.id].onConnect();
+            pj_thread_sleep(500); // sleep a moment to allow connection to stabilize
+
             communicator.logger.notice(msgText);
-            communicator.onStateChange(msgText);
+            communicator.calls[ci.id].sendUserStateStr(mumlib::UserState::COMMENT, msgText);
+            communicator.calls[ci.id].onStateChange(msgText);
+
+            pj_thread_sleep(500); // sleep a moment to allow connection to stabilize
+            this->playAudioFile(communicator.file_welcome);
+
+            communicator.got_dtmf = "";
+
+            /* 
+             * if no pin is set, go ahead and turn off mute/deaf
+             * otherwise, wait for pin to be entered
+             */
+            if ( communicator.pins.size() == 0 ) {
+                // No PIN set... enter DTMF root menu and turn off mute/deaf
+                communicator.dtmf_mode = DTMF_MODE_ROOT;
+                // turning off mute automatically turns off deaf
+                communicator.calls[ci.id].sendUserState(mumlib::UserState::SELF_MUTE, false);
+                pj_thread_sleep(500); // sleep a moment to allow connection to stabilize
+                this->playAudioFile(communicator.file_announce_new_caller, true);
+            } else {
+                // PIN set... enter DTMF unauth menu and play PIN prompt message
+                communicator.dtmf_mode = DTMF_MODE_UNAUTH;
+                communicator.calls[ci.id].joinDefaultChannel();
+                pj_thread_sleep(500); // pause briefly after announcement
+
+                this->playAudioFile(communicator.file_prompt_pin);
+            }
+
         } else if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
             auto &acc = dynamic_cast<_Account &>(account);
 
-            if (not acc.available) {
+            /*
+             * Not sure why we check acc.available, but with multi-call
+             * functionality, this check doesn't work.
+             */
+            //if (not acc.available) {
                 auto msgText = "Call from " + address + " finished.";
 
-                communicator.mixer->clear();
+                communicator.calls[ci.id].mixer->clear();
 
                 communicator.logger.notice(msgText);
-                communicator.onStateChange(msgText);
+                communicator.calls[ci.id].sendUserStateStr(mumlib::UserState::COMMENT, msgText);
+                communicator.calls[ci.id].onStateChange(msgText);
+                communicator.calls[ci.id].sendUserState(mumlib::UserState::SELF_DEAF, true);
+                communicator.calls[ci.id].joinDefaultChannel();
 
-                acc.available = true;
-            }
+                communicator.calls[ci.id].onDisconnect();
+
+                //acc.available = true;
+                acc.active_calls--;
+            //}
 
             delete this;
+        } else {
+            communicator.logger.notice("MYDEBUG: unexpected state in onCallState() call:%d state:%d",
+                    ci.id, ci.state);
         }
     }
 
@@ -172,15 +224,207 @@ namespace sip {
         if (ci.media[0].status == PJSUA_CALL_MEDIA_ACTIVE) {
             auto *aud_med = static_cast<pj::AudioMedia *>(getMedia(0));
 
-            communicator.media->startTransmit(*aud_med);
-            aud_med->startTransmit(*communicator.media);
+            communicator.calls[ci.id].media->startTransmit(*aud_med);
+            aud_med->startTransmit(*communicator.calls[ci.id].media);
         } else if (ci.media[0].status == PJSUA_CALL_MEDIA_NONE) {
-            dynamic_cast<_Account &>(account).available = true;
+            dynamic_cast<_Account &>(account).active_calls++;
+        }
+    }
+
+    void _Call::playAudioFile(std::string file) {
+        this->playAudioFile(file, false); // default is NOT to echo to mumble
+    }
+
+    /* TODO:
+     * - local deafen before playing and undeafen after?
+     */
+    void _Call::playAudioFile(std::string file, bool in_chan) {
+        communicator.logger.info("Entered playAudioFile(%s)", file.c_str());
+        pj::AudioMediaPlayer player;
+        pj::MediaFormatAudio mfa;
+        pj::AudioMediaPlayerInfo pinfo;
+        int wavsize;
+        int sleeptime;
+
+        if ( ! pj_file_exists(file.c_str()) ) {
+            communicator.logger.warn("File not found (%s)", file.c_str());
+            return;
+        }
+
+        /* TODO: use some library to get the actual length in millisec
+         *
+         * This just gets the file size and divides by a constant to
+         * estimate the length of the WAVE file in milliseconds.
+         * This depends on the encoding bitrate, etc.
+         */
+
+        auto ci = getInfo();
+        if (ci.media.size() != 1) {
+            throw sip::Exception("ci.media.size is not 1");
+        }
+
+        if (ci.media[0].status == PJSUA_CALL_MEDIA_ACTIVE) {
+            auto *aud_med = static_cast<pj::AudioMedia *>(getMedia(0));
+
+            try {
+                player.createPlayer(file, PJMEDIA_FILE_NO_LOOP);
+                pinfo = player.getInfo();
+                sleeptime = (pinfo.sizeBytes / (pinfo.payloadBitsPerSample * 2.75));
+
+                if ( in_chan ) { // choose the target sound output
+                    player.startTransmit(*communicator.calls[ci.id].media);
+                } else {
+                    player.startTransmit(*aud_med);
+                }
+
+                pj_thread_sleep(sleeptime);
+
+                if ( in_chan ) { // choose the target sound output
+                    player.stopTransmit(*communicator.calls[ci.id].media);
+                } else {
+                    player.stopTransmit(*aud_med);
+                }
+
+            } catch (...) {
+                communicator.logger.notice("Error playing file %s", file.c_str());
+            }
+        } else {
+            communicator.logger.notice("Call not active - can't play file %s", file.c_str());
         }
     }
 
     void _Call::onDtmfDigit(pj::OnDtmfDigitParam &prm) {
-        communicator.logger.notice("DTMF digit '%s' (call %d).", prm.digit.c_str(), getId());
+        //communicator.logger.notice("DTMF digit '%s' (call %d).",
+        //        prm.digit.c_str(), getId());
+        pj::CallOpParam param;
+
+        auto ci = getInfo();
+        std::string chanName;
+
+        /*
+         * DTMF CALLER MENU
+         */
+
+        switch ( communicator.dtmf_mode ) {
+            case DTMF_MODE_UNAUTH:
+                /*
+                 * IF UNAUTH, the only thing we allow is to authorize.
+                 */
+                switch ( prm.digit[0] ) {
+                    case '#':
+                        /*
+                         * When user presses '#', test PIN entry
+                         */
+                        if ( communicator.pins.size() > 0 ) {
+                            if ( communicator.pins.count(communicator.got_dtmf) > 0 ) {
+                                communicator.logger.info("Caller entered correct PIN");
+                                communicator.dtmf_mode = DTMF_MODE_ROOT;
+                                communicator.logger.notice("MYDEBUG: %s:%s",
+                                        communicator.got_dtmf.c_str(),
+                                        communicator.pins[communicator.got_dtmf].c_str());
+                                communicator.calls[ci.id].joinOtherChannel(
+                                        communicator.pins[communicator.got_dtmf]);
+
+                                this->playAudioFile(communicator.file_entering_channel);
+                                communicator.calls[ci.id].sendUserState(mumlib::UserState::SELF_MUTE, false);
+                                this->playAudioFile(communicator.file_announce_new_caller, true);
+                            } else {
+                                communicator.logger.info("Caller entered wrong PIN");
+                                this->playAudioFile(communicator.file_invalid_pin);
+                                if ( communicator.pin_fails++ >= MAX_PIN_FAILS ) {
+                                param.statusCode = PJSIP_SC_SERVICE_UNAVAILABLE;
+                                    pj_thread_sleep(500); // pause before next announcement
+                                    this->playAudioFile(communicator.file_goodbye);
+                                    pj_thread_sleep(500); // pause before next announcement
+                                    this->hangup(param);
+                                }
+                                this->playAudioFile(communicator.file_prompt_pin);
+                            }
+                            communicator.got_dtmf = "";
+                        }
+                        break;
+                    case '*':
+                        /*
+                         * Allow user to reset PIN entry by pressing '*'
+                         */
+                        communicator.got_dtmf = "";
+                        this->playAudioFile(communicator.file_prompt_pin);
+                        break;
+                    default:
+                        /* 
+                         * In all other cases, add input digit to stack
+                         */
+                        communicator.got_dtmf = communicator.got_dtmf + prm.digit;
+                        if ( communicator.got_dtmf.size() > MAX_CALLER_PIN_LEN ) {
+                            // just drop 'em if too long
+                            param.statusCode = PJSIP_SC_SERVICE_UNAVAILABLE;
+                            this->playAudioFile(communicator.file_goodbye);
+                            pj_thread_sleep(500); // pause before next announcement
+                            this->hangup(param);
+                        }
+                }
+                break;
+            case DTMF_MODE_ROOT:
+                /*
+                 * User already authenticated; no data entry pending
+                 */
+                switch ( prm.digit[0] ) {
+                    case '*':
+                        /*
+                         * Switch user to 'star' menu
+                         */
+                        communicator.dtmf_mode = DTMF_MODE_STAR;
+                        break;
+                    default:
+                        /*
+                         * Default is to ignore all digits in root
+                         */
+                        communicator.logger.info("Ignore DTMF digit '%s' in ROOT state", prm.digit.c_str());
+                }
+                break;
+            case DTMF_MODE_STAR:
+                /*
+                 * User already entered '*'; time to perform action
+                 */
+                switch ( prm.digit[0] ) {
+                    case '5':
+                        // Mute line
+                        communicator.calls[ci.id].sendUserState(mumlib::UserState::SELF_MUTE, true);
+                        this->playAudioFile(communicator.file_mute_on);
+                        break;
+                    case '6':
+                        // Un-mute line
+                        this->playAudioFile(communicator.file_mute_off);
+                        communicator.calls[ci.id].sendUserState(mumlib::UserState::SELF_MUTE, false);
+                        break;
+                    case '9':
+                        if ( communicator.pins.size() > 0 ) {
+                            communicator.dtmf_mode = DTMF_MODE_UNAUTH;
+                            communicator.calls[ci.id].sendUserState(mumlib::UserState::SELF_DEAF, true);
+                            communicator.calls[ci.id].joinDefaultChannel();
+                            this->playAudioFile(communicator.file_prompt_pin);
+                        } else {
+                            // we should have a 'not supported' message
+                        }
+                        break;
+                    case '0': // block these for the menu itself
+                    case '*':
+                    default:
+                        // play menu
+                        communicator.logger.info("Unsupported DTMF digit '%s' in state STAR", prm.digit.c_str());
+                        this->playAudioFile(communicator.file_menu);
+                        break;
+                }
+                /*
+                 * In any case, switch back to root after one digit
+                 */
+                communicator.dtmf_mode = DTMF_MODE_ROOT;
+                break;
+            default:
+                communicator.logger.info("Unexpected DTMF '%s' in unknown state '%d'", prm.digit.c_str(),
+                        communicator.dtmf_mode);
+        }
+
     }
 
     void _Account::onRegState(pj::OnRegStateParam &prm) {
@@ -200,10 +444,12 @@ namespace sip {
 
         if (communicator.uriValidator.validateUri(uri)) {
 
-            if (available) {
+            if (active_calls < max_calls) {
                 param.statusCode = PJSIP_SC_OK;
-                available = false;
+                active_calls++;
             } else {
+                communicator.logger.notice("BUSY - reject incoming call from %s.", uri.c_str());
+                param.statusCode = PJSIP_SC_OK;
                 param.statusCode = PJSIP_SC_BUSY_EVERYWHERE;
             }
 
@@ -216,18 +462,20 @@ namespace sip {
     }
 }
 
-sip::PjsuaCommunicator::PjsuaCommunicator(IncomingConnectionValidator &validator, int frameTimeLength)
+sip::PjsuaCommunicator::PjsuaCommunicator(IncomingConnectionValidator &validator, int frameTimeLength, int maxCalls)
         : logger(log4cpp::Category::getInstance("SipCommunicator")),
           pjsuaLogger(log4cpp::Category::getInstance("Pjsua")),
           uriValidator(validator) {
 
     logWriter.reset(new sip::_LogWriter(pjsuaLogger));
+    max_calls = maxCalls;
+
 
     endpoint.libCreate();
 
     pj::EpConfig endpointConfig;
     endpointConfig.uaConfig.userAgent = "Mumsi Mumble-SIP gateway";
-    endpointConfig.uaConfig.maxCalls = 1;
+    endpointConfig.uaConfig.maxCalls = maxCalls;
 
     endpointConfig.logConfig.writer = logWriter.get();
     endpointConfig.logConfig.level = 5;
@@ -236,11 +484,12 @@ sip::PjsuaCommunicator::PjsuaCommunicator(IncomingConnectionValidator &validator
 
     endpoint.libInit(endpointConfig);
 
-    pj_caching_pool_init(&cachingPool, &pj_pool_factory_default_policy, 0);
-
-    mixer.reset(new mixer::AudioFramesMixer(cachingPool.factory));
-
-    media.reset(new _MumlibAudioMedia(*this, frameTimeLength));
+    for(int i=0; i<maxCalls; ++i) {
+        calls[i].index = i;
+        pj_caching_pool_init(&(calls[i].cachingPool), &pj_pool_factory_default_policy, 0);
+        calls[i].mixer.reset(new mixer::AudioFramesMixer(calls[i].cachingPool.factory));
+        calls[i].media.reset(new _MumlibAudioMedia(i, *this, frameTimeLength));
+    }
 
     logger.info("Created Pjsua communicator with frame length %d ms.", frameTimeLength);
 }
@@ -271,8 +520,8 @@ sip::PjsuaCommunicator::~PjsuaCommunicator() {
     endpoint.libDestroy();
 }
 
-void sip::PjsuaCommunicator::sendPcmSamples(int sessionId, int sequenceNumber, int16_t *samples, unsigned int length) {
-    mixer->addFrameToBuffer(sessionId, sequenceNumber, samples, length);
+void sip::PjsuaCommunicator::sendPcmSamples(int callId, int sessionId, int sequenceNumber, int16_t *samples, unsigned int length) {
+    calls[callId].mixer->addFrameToBuffer(sessionId, sequenceNumber, samples, length);
 }
 
 pj_status_t sip::PjsuaCommunicator::mediaPortGetFrame(pjmedia_port *port, pjmedia_frame *frame) {
@@ -280,7 +529,8 @@ pj_status_t sip::PjsuaCommunicator::mediaPortGetFrame(pjmedia_port *port, pjmedi
     pj_int16_t *samples = static_cast<pj_int16_t *>(frame->buf);
     pj_size_t count = frame->size / 2 / PJMEDIA_PIA_CCNT(&(port->info));
 
-    const int readSamples = mixer->getMixedSamples(samples, count);
+    int call_id = (int) port->port_data.ldata;
+    const int readSamples = calls[call_id].mixer->getMixedSamples(samples, count);
 
     if (readSamples < count) {
         pjsuaLogger.debug("Requested %d samples, available %d, filling remaining with zeros.",
@@ -299,9 +549,11 @@ pj_status_t sip::PjsuaCommunicator::mediaPortPutFrame(pjmedia_port *port, pjmedi
     pj_size_t count = frame->size / 2 / PJMEDIA_PIA_CCNT(&port->info);
     frame->type = PJMEDIA_FRAME_TYPE_AUDIO;
 
+    int call_id = (int) port->port_data.ldata;
+
     if (count > 0) {
-        pjsuaLogger.debug("Calling onIncomingPcmSamples with %d samples.", count);
-        onIncomingPcmSamples(samples, count);
+        pjsuaLogger.debug("Calling onIncomingPcmSamples with %d samples (call_id=%d).", count, call_id);
+        this->calls[call_id].onIncomingPcmSamples(samples, count);
     }
 
     return PJ_SUCCESS;
@@ -318,6 +570,7 @@ void sip::PjsuaCommunicator::registerAccount(string host, string user, string pa
     accountConfig.sipConfig.authCreds.push_back(cred);
 
     logger.info("Registering account for URI: %s.", uri.c_str());
-    account.reset(new _Account(*this));
+    account.reset(new _Account(*this, max_calls));
     account->create(accountConfig);
 }
+

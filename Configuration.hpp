@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <stdexcept>
+#include <unordered_map>
 
 namespace config {
 
@@ -30,6 +31,8 @@ namespace config {
         bool getBool(const std::string &property);
 
         std::string getString(const std::string &property);
+
+        std::unordered_map<std::string, std::string> getChildren(const std::string &property);
 
     private:
         ConfigurationImpl *impl;
